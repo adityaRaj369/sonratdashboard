@@ -20,7 +20,12 @@ export const agentGeneralSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   role: z.string().min(1).max(120),
   industry: z.string().max(120).optional().nullable(),
-  purpose: z.enum(["sales", "support", "hybrid"]).default("sales"),
+  purpose: z.enum(["sales", "support", "whatsapp", "hybrid"]).default("sales"),
+  /** Optional published Agent Flow to guide conversation structure */
+  flowId: z
+    .union([z.string().uuid(), z.literal(""), z.null()])
+    .optional()
+    .transform((v) => (v === "" || v == null ? null : v)),
 });
 
 export const agentCompanySchema = z.object({
@@ -136,6 +141,18 @@ export const agentConfigSchema = z.object({
       supportInformation: z.array(z.string()).default([]),
       salesInformation: z.array(z.string()).default([]),
       additionalKnowledge: z.array(z.string()).default([]),
+      documents: z
+        .array(
+          z.object({
+            id: z.string(),
+            fileName: z.string(),
+            objectKey: z.string(),
+            contentType: z.string(),
+            extractedText: z.string().default(""),
+            uploadedAt: z.string(),
+          }),
+        )
+        .default([]),
     })
     .default({}),
   personality: agentPersonalitySchema,
@@ -153,6 +170,7 @@ export type AgentConfig = z.infer<typeof agentConfigSchema>;
 export const createAgentSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
+  purpose: z.enum(["sales", "support", "whatsapp", "hybrid"]).default("sales"),
 });
 
 export const updateAgentSectionSchema = z.object({

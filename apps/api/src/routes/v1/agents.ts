@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { paginationSchema, createAgentSchema, updateAgentSectionSchema } from "@sonrat/shared";
 import { z } from "zod";
@@ -7,9 +8,11 @@ import { authMiddleware, requirePerm } from "../../middleware/auth.js";
 import { tenantMiddleware, getOrgId, getUserId } from "../../middleware/tenant.js";
 import { idempotencyMiddleware } from "../../middleware/idempotency.js";
 import { AgentService } from "../../services/agent.service.js";
+import { AgentKnowledgeService } from "../../services/agent-knowledge.service.js";
 
 const agents = new Hono<{ Variables: AppVariables }>();
 const service = new AgentService();
+const knowledge = new AgentKnowledgeService();
 
 agents.use("*", authMiddleware, tenantMiddleware);
 
@@ -34,6 +37,39 @@ agents.get("/:id", requirePerm("agents.read"), async (c) => {
   const agent = await service.get(getOrgId(c), c.req.param("id")!);
   return c.json(agent);
 });
+
+agents.post("/:id/knowledge/documents", requirePerm("agents.write"), async (c) => {
+  const body = await c.req.parseBody();
+  const file = body["file"];
+  if (!file || typeof file === "string") {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "file is required" } },
+      400,
+    );
+  }
+  const data = Buffer.from(await file.arrayBuffer());
+  const result = await knowledge.uploadDocument(
+    getOrgId(c),
+    getUserId(c),
+    c.req.param("id")!,
+    { name: file.name, type: file.type, data },
+  );
+  return c.json(result, 201);
+});
+
+agents.delete(
+  "/:id/knowledge/documents/:documentId",
+  requirePerm("agents.write"),
+  async (c) => {
+    const result = await knowledge.removeDocument(
+      getOrgId(c),
+      getUserId(c),
+      c.req.param("id")!,
+      c.req.param("documentId")!,
+    );
+    return c.json(result);
+  },
+);
 
 agents.patch(
   "/:id",

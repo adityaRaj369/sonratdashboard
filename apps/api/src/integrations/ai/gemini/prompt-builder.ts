@@ -1,3 +1,4 @@
+import { db } from "@sonrat/database";
 import {
   agentConfigSchema,
   buildAgentRuntimeContext,
@@ -5,6 +6,31 @@ import {
   type AgentConfig,
   type PromptLayers,
 } from "@sonrat/shared";
+
+function flowGraphToInstructions(graph: {
+  nodes?: Array<{
+    id: string;
+    type: string;
+    label?: string;
+    data?: Record<string, unknown>;
+  }>;
+  edges?: Array<{ source: string; target: string; label?: string }>;
+}): string {
+  const nodes = graph.nodes ?? [];
+  if (!nodes.length) return "";
+  const lines = nodes.map((n, i) => {
+    const text =
+      (typeof n.data?.text === "string" && n.data.text) ||
+      (typeof n.data?.prompt === "string" && n.data.prompt) ||
+      n.label ||
+      "";
+    return `${i + 1}. [${n.type}] ${text}`.trim();
+  });
+  return [
+    "Conversation flow (follow in order; adapt wording naturally; never invent company facts):",
+    ...lines,
+  ].join("\n");
+}
 
 export function configToPromptLayers(
   config: AgentConfig,
@@ -40,7 +66,17 @@ export function configToPromptLayers(
     tone: config.personality.tone,
     speakingStyle: config.personality.speakingStyle,
     products,
-    services: config.knowledge.supportInformation.join("\n"),
+    services: [
+      ...config.knowledge.supportInformation,
+      ...config.knowledge.salesInformation,
+      ...config.knowledge.additionalKnowledge,
+      ...config.knowledge.documents.map(
+        (d) =>
+          `[Document: ${d.fileName}]\n${(d.extractedText || "").slice(0, 8000)}`,
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     pricing,
     policies: config.knowledge.policies.join("\n"),
     faqs: config.knowledge.faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join("\n"),
@@ -68,15 +104,27 @@ export function buildPromptFromDraft(
     organizationId?: string;
     agentId?: string;
     agentVersionId?: string;
+    flowInstructions?: string;
   },
 ) {
   const config = agentConfigSchema.parse(draft);
   const layers = configToPromptLayers(config, extras);
-  const systemPrompt = buildAgentSystemPrompt(layers);
+  let systemPrompt = buildAgentSystemPrompt(layers);
+
+  if (extras?.flowInstructions) {
+    systemPrompt = `${systemPrompt}\n\n${extras.flowInstructions}`;
+  }
 
   if (extras?.organizationId && extras.agentId && extras.agentVersionId) {
     return buildAgentRuntimeContext({
-      layers,
+      layers: extras.flowInstructions
+        ? {
+            ...layers,
+            businessRules: [layers.businessRules, extras.flowInstructions]
+              .filter(Boolean)
+              .join("\n"),
+          }
+        : layers,
       supportedLanguages: config.languages.supportedLanguages,
       defaultLanguage: config.languages.defaultLanguage,
       voiceId: config.voice.voiceId,
@@ -94,4 +142,36 @@ export function buildPromptFromDraft(
     voiceId: config.voice.voiceId,
     enabledTools: config.tools.enabledTools,
   };
+}
+
+/** Load published flow graph instructions when agent.general.flowId is set. */
+export async function resolveFlowInstructions(
+  organizationId: string,
+  draft: unknown,
+): Promise<string | undefined> {
+  try {
+    const general = (draft as { general?: { flowId?: string | null } })?.general;
+    const flowId = general?.flowId;
+    if (!flowId) return undefined;
+    const flow = await db.agentFlow.findFirst({
+      where: { id: flowId, organizationId, deletedAt: null },
+    });
+    if (!flow?.activeVersionId) return undefined;
+    const version = await db.agentFlowVersion.findFirst({
+      where: { id: flow.activeVersionId, organizationId },
+    });
+    if (!version) return undefined;
+    return flowGraphToInstructions(
+      version.graph as {
+        nodes?: Array<{
+          id: string;
+          type: string;
+          label?: string;
+          data?: Record<string, unknown>;
+        }>;
+      },
+    );
+  } catch {
+    return undefined;
+  }
 }

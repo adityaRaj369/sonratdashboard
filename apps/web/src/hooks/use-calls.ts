@@ -16,6 +16,7 @@ export function useCalls(params?: {
   search?: string;
   status?: string;
   campaignId?: string;
+  direction?: "INBOUND" | "OUTBOUND";
 }) {
   return useQuery({
     queryKey: callKeys.list(params),
@@ -36,5 +37,14 @@ export function useCallTranscript(id: string) {
     queryKey: callKeys.transcript(id),
     queryFn: () => callsApi.transcript(id),
     enabled: Boolean(id),
+  });
+}
+
+export function useCallRecording(id: string) {
+  return useQuery({
+    queryKey: [...callKeys.detail(id), "recording"] as const,
+    queryFn: () => callsApi.recording(id),
+    enabled: Boolean(id),
+    retry: false,
   });
 }

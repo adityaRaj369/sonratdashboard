@@ -123,6 +123,11 @@ export const http = {
     body?: unknown,
     opts?: Omit<RequestOptions, "method" | "body">,
   ) => apiRequest<T>(path, { method: "PATCH", body, ...opts }),
+  put: <T>(
+    path: string,
+    body?: unknown,
+    opts?: Omit<RequestOptions, "method" | "body">,
+  ) => apiRequest<T>(path, { method: "PUT", body, ...opts }),
   delete: <T>(path: string, opts?: Omit<RequestOptions, "method">) =>
     apiRequest<T>(path, { method: "DELETE", ...opts }),
   upload: <T>(

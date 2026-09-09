@@ -172,8 +172,22 @@ export default function CampaignCreateInlineEditor({ onClose, onCreated }: Props
 
         {step === 3 && (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Select contacts to include ({form.contactIds.length} selected)
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Select contacts to include ({form.contactIds.length} selected)
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => router.push("/contacts/import")}
+              >
+                Import Excel / CSV
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Upload a sales list under Contacts → Import, then return here and
+              select those contacts.
             </p>
             <div className="max-h-80 space-y-1 overflow-y-auto rounded-md border border-border p-2">
               {contacts.data?.items.map((contact) => {
@@ -202,6 +216,11 @@ export default function CampaignCreateInlineEditor({ onClose, onCreated }: Props
                   </label>
                 );
               })}
+              {!contacts.data?.items.length && (
+                <p className="p-2 text-sm text-muted-foreground">
+                  No contacts yet. Import an Excel list first.
+                </p>
+              )}
             </div>
           </div>
         )}

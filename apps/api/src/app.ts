@@ -7,6 +7,7 @@ import { errorHandler, requestIdMiddleware } from "./middleware/error.js";
 
 import auth from "./routes/v1/auth.js";
 import agents from "./routes/v1/agents.js";
+import agentFlows from "./routes/v1/agent-flows.js";
 import campaigns from "./routes/v1/campaigns.js";
 import contacts from "./routes/v1/contacts.js";
 import calls from "./routes/v1/calls.js";
@@ -17,6 +18,7 @@ import notifications from "./routes/v1/notifications.js";
 import workspaceState from "./routes/v1/workspace-state.js";
 import health from "./routes/v1/health.js";
 import exotelWebhooks from "./routes/webhooks/exotel.js";
+import whatsappWebhooks from "./routes/webhooks/whatsapp.js";
 import internalVoice from "./routes/internal/voice.js";
 
 export function createApp() {
@@ -60,6 +62,7 @@ export function createApp() {
 
   app.route("/api/v1/auth", auth);
   app.route("/api/v1/agents", agents);
+  app.route("/api/v1/agent-flows", agentFlows);
   app.route("/api/v1/campaigns", campaigns);
   app.route("/api/v1/contacts", contacts);
   app.route("/api/v1/calls", calls);
@@ -70,6 +73,7 @@ export function createApp() {
   app.route("/api/v1/workspace-state", workspaceState);
 
   app.route("/webhooks/exotel", exotelWebhooks);
+  app.route("/webhooks/whatsapp", whatsappWebhooks);
   app.route("/internal/voice", internalVoice);
 
   app.notFound((c) =>

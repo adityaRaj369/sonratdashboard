@@ -42,12 +42,12 @@ export default function CampaignsPage() {
   return (
     <Workspace>
       <WorkspaceHeader
-        title="Campaigns"
-        description="Manage outbound AI calling campaigns"
+        title="Sales"
+        description="Upload lead lists and run bulk outbound AI sales calls"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
-            New campaign
+            New sale
           </Button>
         }
       />
@@ -126,7 +126,7 @@ export default function CampaignsPage() {
                   </TD>
                   <TD className="text-right">
                     <Link
-                      href={`/campaigns/${campaign.id}`}
+                      href={`/sales/${campaign.id}`}
                       className="text-sm font-medium text-primary hover:underline"
                     >
                       Open
@@ -142,9 +142,9 @@ export default function CampaignsPage() {
       <WorkspacePanel
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Create Campaign"
-        subtitle="Campaigns"
-        description="Configure outbound calling in seven steps"
+        title="Create sale"
+        subtitle="Sales"
+        description="Upload contacts and configure outbound AI calling"
         widthClass="w-[80vw] max-w-[1600px] min-w-[360px]"
       >
         <CampaignCreateInlineEditor onClose={() => setCreateOpen(false)} />

@@ -18,7 +18,8 @@ import {
 import { z } from "zod";
 import { Button, Field, Input, Select, Textarea, useToast } from "@/components/ui";
 import { useUpdateAgentSection } from "@/hooks/use-agents";
-import type { AgentSection } from "@/services/api/agents";
+import { useAgentFlows } from "@/hooks/use-agent-flows";
+import { agentsApi, type AgentSection } from "@/services/api/agents";
 
 function StringListEditor({
   value,
@@ -119,6 +120,7 @@ type SectionProps = {
 
 export function GeneralSection({ agentId, initialData }: SectionProps) {
   const update = useUpdateAgentSection(agentId);
+  const flows = useAgentFlows({ limit: 100 });
   const { toast } = useToast();
   const form = useForm<z.infer<typeof agentGeneralSchema>>({
     resolver: zodResolver(agentGeneralSchema),
@@ -126,6 +128,7 @@ export function GeneralSection({ agentId, initialData }: SectionProps) {
       name: "",
       role: "",
       purpose: "sales",
+      flowId: null,
     },
   });
 
@@ -163,10 +166,26 @@ export function GeneralSection({ agentId, initialData }: SectionProps) {
         </Field>
         <Field label="Purpose">
           <Select {...form.register("purpose")}>
-            <option value="sales">Sales</option>
-            <option value="support">Support</option>
+            <option value="sales">Sales call agent</option>
+            <option value="support">Customer support (call)</option>
+            <option value="whatsapp">WhatsApp support agent</option>
             <option value="hybrid">Hybrid</option>
           </Select>
+        </Field>
+        <Field label="Conversation flow" className="sm:col-span-2">
+          <Select {...form.register("flowId")}>
+            <option value="">None — free-form from knowledge</option>
+            {(flows.data?.items || [])
+              .filter((f) => f.status === "PUBLISHED" || f.activeVersionId)
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.status})
+                </option>
+              ))}
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Publish a flow under Agents → Flows, then attach it here.
+          </p>
         </Field>
         <Field label="Description" className="sm:col-span-2">
           <Textarea {...form.register("description")} />
@@ -371,7 +390,7 @@ export function LanguagesSection({ agentId, initialData }: SectionProps) {
   const { toast } = useToast();
   const defaults = React.useMemo<z.infer<typeof agentLanguageSchema>>(
     () => ({
-      supportedLanguages: ["en"],
+      supportedLanguages: ["en", "hi"],
       defaultLanguage: "en",
       languageDetection: true,
       languageSwitching: true,
@@ -387,6 +406,16 @@ export function LanguagesSection({ agentId, initialData }: SectionProps) {
     setValues((initialData as z.infer<typeof agentLanguageSchema>) || defaults);
     setDirty(false);
   }, [initialData, defaults]);
+
+  const applyPreset = (codes: string[]) => {
+    setValues((v) => ({
+      ...v,
+      supportedLanguages: codes,
+      defaultLanguage: codes[0] || "en",
+      fallbackLanguage: codes.includes("en") ? "en" : codes[0] || "en",
+    }));
+    setDirty(true);
+  };
 
   return (
     <SectionFormShell
@@ -411,6 +440,40 @@ export function LanguagesSection({ agentId, initialData }: SectionProps) {
         }
       }}
     >
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => applyPreset(["en", "hi"])}
+        >
+          EN + HI
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => applyPreset(["en", "hi", "ta", "te", "kn", "ml"])}
+        >
+          South India
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => applyPreset(["en", "hi", "bn", "mr", "gu", "pa"])}
+        >
+          North / West
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => applyPreset(["en"])}
+        >
+          English only
+        </Button>
+      </div>
       <Field label="Supported languages">
         <StringListEditor
           value={values.supportedLanguages}
@@ -917,12 +980,21 @@ export function ProductsSection({ agentId, initialData }: SectionProps) {
 export function KnowledgeSection({ agentId, initialData }: SectionProps) {
   const update = useUpdateAgentSection(agentId);
   const { toast } = useToast();
+  type KnowledgeDoc = {
+    id: string;
+    fileName: string;
+    objectKey: string;
+    contentType: string;
+    extractedText: string;
+    uploadedAt: string;
+  };
   type Knowledge = {
     faqs: Array<{ question: string; answer: string }>;
     policies: string[];
     supportInformation: string[];
     salesInformation: string[];
     additionalKnowledge: string[];
+    documents: KnowledgeDoc[];
   };
   const defaults = React.useMemo<Knowledge>(
     () => ({
@@ -931,18 +1003,58 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
       supportInformation: [],
       salesInformation: [],
       additionalKnowledge: [],
+      documents: [],
     }),
     [],
   );
-  const [values, setValues] = React.useState<Knowledge>(
-    (initialData as Knowledge) || defaults,
-  );
+  const [values, setValues] = React.useState<Knowledge>({
+    ...defaults,
+    ...((initialData as Knowledge) || {}),
+    documents: ((initialData as Knowledge)?.documents as KnowledgeDoc[]) || [],
+  });
   const [dirty, setDirty] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    setValues((initialData as Knowledge) || defaults);
+    setValues({
+      ...defaults,
+      ...((initialData as Knowledge) || {}),
+      documents: ((initialData as Knowledge)?.documents as KnowledgeDoc[]) || [],
+    });
     setDirty(false);
   }, [initialData, defaults]);
+
+  const onUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const result = await agentsApi.uploadKnowledgeDocument(agentId, file);
+      setValues((v) => ({
+        ...v,
+        ...(result.knowledge as Knowledge),
+        documents: (result.knowledge as Knowledge).documents || [
+          ...(v.documents || []),
+          result.document,
+        ],
+      }));
+      toast({
+        title: "Knowledge file uploaded",
+        description: result.document.extractedText
+          ? `Extracted ${result.document.extractedText.length} characters into the agent brain.`
+          : "File stored. Add notes if text extraction was empty.",
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   return (
     <SectionFormShell
@@ -962,6 +1074,84 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
         }
       }}
     >
+      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">Company documents</p>
+            <p className="text-xs text-muted-foreground">
+              Upload PDF / TXT / MD / CSV. Text is extracted into the live agent prompt on publish.
+            </p>
+          </div>
+          <div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onUpload(f);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              loading={uploading}
+              onClick={() => fileRef.current?.click()}
+            >
+              Upload file
+            </Button>
+          </div>
+        </div>
+        {(values.documents || []).length ? (
+          <ul className="space-y-2">
+            {values.documents.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{doc.fileName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {doc.extractedText
+                      ? `${doc.extractedText.length} chars extracted`
+                      : "No text extracted yet"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const result = await agentsApi.removeKnowledgeDocument(
+                        agentId,
+                        doc.id,
+                      );
+                      setValues((v) => ({
+                        ...v,
+                        ...(result.knowledge as Knowledge),
+                      }));
+                      toast({ title: "Document removed", variant: "success" });
+                    } catch (err) {
+                      toast({
+                        title: "Remove failed",
+                        description:
+                          err instanceof Error ? err.message : undefined,
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
+        )}
+      </div>
       <Field label="Policies">
         <StringListEditor
           value={values.policies}

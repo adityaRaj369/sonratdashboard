@@ -110,6 +110,30 @@ exotel.post("/call-status", async (c) => {
         });
       }
 
+      const recordingUrl = String(
+        parsed.raw.RecordingUrl ??
+          parsed.raw.recordingUrl ??
+          parsed.raw.RecordingUrlHttps ??
+          "",
+      ).trim();
+      if (recordingUrl && /^https?:\/\//i.test(recordingUrl)) {
+        await db.call.update({
+          where: { id: call.id },
+          data: { recordingReference: recordingUrl },
+        });
+        await enqueueJob(
+          QUEUE_NAMES.RECORDINGS,
+          "process_recording",
+          {
+            organizationId: call.organizationId,
+            callId: call.id,
+            objectKey: recordingUrl,
+            contentType: "audio/mpeg",
+          },
+          { jobId: `process_recording:${call.id}` },
+        );
+      }
+
       await enqueueJob(QUEUE_NAMES.WEBHOOK_PROCESS, "exotel-status", {
         organizationId: call.organizationId,
         callId: call.id,

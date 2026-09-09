@@ -55,6 +55,7 @@ calls.get(
       status: z.string().optional(),
       agentId: z.string().uuid().optional(),
       search: z.string().optional(),
+      direction: z.enum(["INBOUND", "OUTBOUND"]).optional(),
     }),
   ),
   async (c) => {
@@ -65,12 +66,14 @@ calls.get(
       campaignId: q.campaignId,
       status: q.status,
       agentId: q.agentId,
+      search: q.search,
+      direction: q.direction,
     });
     return c.json({
       ...page,
       items: page.items.map((call) => ({
         ...call,
-        fromNumber: null,
+        fromNumber: call.phoneNumber?.e164 ?? null,
         toNumber: call.contact?.normalizedPhone ?? null,
       })),
     });
@@ -137,6 +140,27 @@ calls.get("/:id/transcript", requirePerm("calls.read"), async (c) => {
   }
 
   return c.json({ turns, messages: transcript.messages, transcripts: transcript.transcripts });
+});
+
+calls.get("/:id/recording", requirePerm("calls.read"), async (c) => {
+  const recording = await service.getRecording(getOrgId(c), c.req.param("id")!);
+  if (!recording) {
+    return c.json(
+      { error: { code: "NOT_FOUND", message: "Recording not available" } },
+      404,
+    );
+  }
+  return c.json(recording);
+});
+
+calls.get("/:id/recording/stream", requirePerm("calls.read"), async (c) => {
+  const obj = await service.streamRecording(getOrgId(c), c.req.param("id")!);
+  return new Response(new Uint8Array(obj.body), {
+    headers: {
+      "content-type": obj.contentType || "audio/mpeg",
+      "cache-control": "private, max-age=60",
+    },
+  });
 });
 
 export default calls;

@@ -1,12 +1,13 @@
 import {
   BarChart3,
   Bot,
+  GitBranch,
+  Headset,
   LayoutDashboard,
   Megaphone,
-  PhoneCall,
+  MessageCircle,
   Settings,
   UserCog,
-  Users,
 } from "lucide-react";
 import { registerModule } from "./types";
 
@@ -28,30 +29,39 @@ registerModule({
 });
 
 registerModule({
-  id: "campaigns",
-  label: "Campaigns",
-  icon: Megaphone,
-  route: "/campaigns",
-  permissions: ["campaigns.show_menu"],
+  id: "flows",
+  label: "Flows",
+  icon: GitBranch,
+  route: "/flows",
+  permissions: ["agents.show_menu"],
   order: 3,
 });
 
 registerModule({
-  id: "contacts",
-  label: "Contacts",
-  icon: Users,
-  route: "/contacts",
-  permissions: ["contacts.show_menu"],
+  id: "customer-support",
+  label: "Customer Support",
+  icon: Headset,
+  route: "/support",
+  permissions: ["calls.show_menu"],
   order: 4,
 });
 
 registerModule({
-  id: "calls",
-  label: "Calls",
-  icon: PhoneCall,
-  route: "/calls",
-  permissions: ["calls.show_menu"],
+  id: "sales",
+  label: "Sales",
+  icon: Megaphone,
+  route: "/sales",
+  permissions: ["campaigns.show_menu"],
   order: 5,
+});
+
+registerModule({
+  id: "whatsapp",
+  label: "WhatsApp",
+  icon: MessageCircle,
+  route: "/whatsapp",
+  permissions: ["agents.show_menu"],
+  order: 6,
 });
 
 registerModule({
@@ -60,7 +70,7 @@ registerModule({
   icon: BarChart3,
   route: "/analytics",
   permissions: ["analytics.show_menu"],
-  order: 6,
+  order: 7,
 });
 
 registerModule({
@@ -80,5 +90,3 @@ registerModule({
   permissions: ["adminconsole.show_menu"],
   order: 110,
 });
-
-export { getModules, getSidebarItems, registerModule } from "./types";

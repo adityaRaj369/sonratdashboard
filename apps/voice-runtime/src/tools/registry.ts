@@ -102,12 +102,16 @@ export class ToolRegistry {
     return [...this.tools.values()];
   }
 
-  toAiTools(): Array<{
+  toAiTools(enabledNames?: string[]): Array<{
     name: string;
     description: string;
     parameters: Record<string, unknown>;
   }> {
-    return this.list().map(({ name, description, parameters }) => ({
+    const list =
+      enabledNames && enabledNames.length > 0
+        ? this.list().filter((t) => enabledNames.includes(t.name))
+        : this.list();
+    return list.map(({ name, description, parameters }) => ({
       name,
       description,
       parameters,

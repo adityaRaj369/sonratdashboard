@@ -1,5 +1,5 @@
 export { GeminiClient } from "./client.js";
-export { buildPromptFromDraft, configToPromptLayers } from "./prompt-builder.js";
+export { buildPromptFromDraft, configToPromptLayers, resolveFlowInstructions } from "./prompt-builder.js";
 
 import { getConfig } from "@sonrat/config";
 import type { AiProvider, AiSessionConfig } from "../types.js";

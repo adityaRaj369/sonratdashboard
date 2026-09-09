@@ -65,9 +65,20 @@ export class GeminiLiveSession implements AiSession {
         responseModalities: ["AUDIO"],
         systemInstruction:
           this.params.systemInstruction ||
-          "You are a concise phone sales agent. Keep answers under 2 sentences. Speak clearly.",
-        // Tools disabled on live path until internal auth/callId passthrough is solid.
-        tools: undefined,
+          "You are a company phone agent on a live call. Never say you are Gemini, Google, or an AI model. Use only the company knowledge in your instructions. Keep answers under 2 short sentences.",
+        // Tools re-enabled when the agent config provides them.
+        tools:
+          this.params.tools.length > 0
+            ? [
+                {
+                  functionDeclarations: this.params.tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    parameters: t.parameters,
+                  })),
+                },
+              ]
+            : undefined,
         speechConfig: this.params.voiceId
           ? {
               voiceConfig: {
@@ -209,8 +220,10 @@ export class GeminiLiveSession implements AiSession {
     if (!this.liveSession || this.closed) return;
     const prompt =
       text === "__session_start__"
-        ? "The phone call just connected. Greet the caller in one short friendly sentence and ask how you can help. Speak now."
-        : text;
+        ? "The phone call just connected. Follow your system identity and company knowledge. Greet in one short sentence as that company agent. Never say Gemini, Google, or that you are a language model. Speak now."
+        : text.startsWith("You are ")
+          ? `${text} Speak now.`
+          : text;
     await this.liveSession.sendClientContent?.({
       turns: [{ role: "user", parts: [{ text: prompt }] }],
       turnComplete: true,

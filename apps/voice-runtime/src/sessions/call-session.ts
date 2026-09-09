@@ -41,6 +41,9 @@ export interface CreateCallSessionInput {
   defaultLanguage: string;
   supportedLanguages: string[];
   voiceId?: string;
+  /** First spoken turn instruction for the AI (company-aware). */
+  openingInstruction?: string;
+  enabledTools?: string[];
   metadata?: Record<string, unknown>;
   /** Resume an existing session id */
   sessionId?: string;
@@ -83,11 +86,18 @@ export class CallSession {
       contactId: input.contactId,
       direction: input.direction,
       systemPrompt: input.systemPrompt,
-      tools: tools.toAiTools(),
+      tools: tools.toAiTools(input.enabledTools),
       supportedLanguages: input.supportedLanguages,
       defaultLanguage: input.defaultLanguage,
       language: createInitialLanguageState(input.defaultLanguage),
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(input.openingInstruction
+          ? { openingInstruction: input.openingInstruction }
+          : {}),
+        ...(input.voiceId ? { voiceId: input.voiceId } : {}),
+        ...(input.enabledTools ? { enabledTools: input.enabledTools } : {}),
+      },
     };
     this.log = childLogger({
       component: "call-session",
@@ -140,7 +150,12 @@ export class CallSession {
     );
     this.log.info("session started");
     // Kick mock/real providers to greet without waiting for caller audio.
-    void this.ai.sendText("__session_start__").catch((err) => {
+    const opening =
+      typeof this.context.metadata.openingInstruction === "string" &&
+      this.context.metadata.openingInstruction.trim()
+        ? this.context.metadata.openingInstruction
+        : "__session_start__";
+    void this.ai.sendText(opening).catch((err) => {
       this.log.warn({ err }, "greeting kick failed");
     });
   }

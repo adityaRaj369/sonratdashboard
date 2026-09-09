@@ -10,7 +10,7 @@ import {
   type AgentConfig,
 } from "@sonrat/shared";
 import { z } from "zod";
-import { buildPromptFromDraft, configToPromptLayers } from "../integrations/ai/gemini/prompt-builder.js";
+import { buildPromptFromDraft, configToPromptLayers, resolveFlowInstructions } from "../integrations/ai/gemini/prompt-builder.js";
 import { cursorWhere, paginateByCreatedAt } from "../lib/pagination.js";
 import { AuditService } from "./audit.service.js";
 
@@ -66,9 +66,22 @@ export class AgentService {
       general: {
         name: data.name,
         description: data.description ?? null,
-        role: "Sales Development Representative",
+        role:
+          data.purpose === "support"
+            ? "Customer Support Agent"
+            : data.purpose === "whatsapp"
+              ? "WhatsApp Support Agent"
+              : "Sales Development Representative",
         industry: "",
-        purpose: "sales" as const,
+        purpose: data.purpose,
+        flowId: null,
+      },
+      languages: {
+        supportedLanguages: ["en", "hi"],
+        defaultLanguage: "en",
+        languageDetection: true,
+        languageSwitching: true,
+        fallbackLanguage: "en",
       },
     };
 
@@ -276,6 +289,10 @@ export class AgentService {
       throw new ValidationError("Agent configuration is invalid", validation.errors);
     }
 
+    const flowInstructions = await resolveFlowInstructions(
+      organizationId,
+      agent.draftConfig,
+    );
     const runtime = buildPromptFromDraft(agent.draftConfig, {
       customerName: input?.customerName ?? "Test Customer",
       customerContext: input?.message
@@ -285,6 +302,7 @@ export class AgentService {
       organizationId,
       agentId,
       agentVersionId: agent.activeVersionId ?? "00000000-0000-0000-0000-000000000000",
+      flowInstructions,
     });
 
     return {

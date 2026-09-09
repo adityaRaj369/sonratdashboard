@@ -21,6 +21,8 @@ export class CallService {
       campaignId?: string;
       status?: string;
       agentId?: string;
+      direction?: string;
+      search?: string;
     },
   ) {
     const rows = await db.call.findMany({
@@ -29,6 +31,16 @@ export class CallService {
         ...(opts.campaignId ? { campaignId: opts.campaignId } : {}),
         ...(opts.status ? { status: opts.status as never } : {}),
         ...(opts.agentId ? { agentId: opts.agentId } : {}),
+        ...(opts.direction ? { direction: opts.direction as never } : {}),
+        ...(opts.search
+          ? {
+              OR: [
+                { contact: { name: { contains: opts.search, mode: "insensitive" } } },
+                { contact: { normalizedPhone: { contains: opts.search } } },
+                { contact: { rawPhone: { contains: opts.search } } },
+              ],
+            }
+          : {}),
         ...(cursorWhere(opts.cursor) ?? {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -37,6 +49,7 @@ export class CallService {
         contact: { select: { id: true, name: true, normalizedPhone: true } },
         agent: { select: { id: true, name: true } },
         campaign: { select: { id: true, name: true } },
+        phoneNumber: { select: { e164: true } },
       },
     });
     return paginateByCreatedAt(rows, opts.limit);
@@ -182,5 +195,84 @@ export class CallService {
     });
 
     return this.get(input.organizationId, call.id);
+  }
+
+  async getRecording(organizationId: string, callId: string) {
+    const call = await this.get(organizationId, callId);
+    let recording = await db.callRecording.findFirst({
+      where: { organizationId, callId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const ref = call.recordingReference;
+    if (!recording && ref && /^https?:\/\//i.test(ref)) {
+      try {
+        const res = await fetch(ref);
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          const contentType = res.headers.get("content-type") || "audio/mpeg";
+          const objectKey = `recordings/${organizationId}/${callId}`;
+          const { getStorage } = await import("../lib/storage.js");
+          const storage = getStorage();
+          await storage.putObject({ key: objectKey, body: buf, contentType });
+          recording = await db.callRecording.create({
+            data: {
+              organizationId,
+              callId,
+              objectKey,
+              contentType,
+              durationSeconds: call.durationSeconds,
+            },
+          });
+          await db.call.update({
+            where: { id: callId },
+            data: { recordingReference: objectKey },
+          });
+        }
+      } catch {
+        // ignore ingest failure
+      }
+    }
+
+    if (
+      !recording &&
+      call.recordingReference &&
+      !/^https?:\/\//i.test(call.recordingReference)
+    ) {
+      recording = {
+        id: call.id,
+        organizationId,
+        callId,
+        objectKey: call.recordingReference,
+        durationSeconds: call.durationSeconds,
+        contentType: "audio/mpeg",
+        retentionUntil: null,
+        createdAt: call.createdAt,
+      };
+    }
+
+    if (!recording) return null;
+
+    const { getStorage } = await import("../lib/storage.js");
+    const storage = getStorage();
+    const exists = await storage.exists(recording.objectKey);
+    if (!exists) return null;
+
+    return {
+      id: recording.id,
+      callId,
+      objectKey: recording.objectKey,
+      contentType: recording.contentType,
+      durationSeconds: recording.durationSeconds,
+      streamPath: `/api/v1/calls/${callId}/recording/stream`,
+    };
+  }
+
+  async streamRecording(organizationId: string, callId: string) {
+    const meta = await this.getRecording(organizationId, callId);
+    if (!meta) throw new NotFoundError("Recording");
+    const { getStorage } = await import("../lib/storage.js");
+    const storage = getStorage();
+    return storage.getObject(meta.objectKey);
   }
 }

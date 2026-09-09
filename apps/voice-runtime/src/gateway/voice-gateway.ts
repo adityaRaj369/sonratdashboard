@@ -9,9 +9,10 @@ import type { CallSession } from "../sessions/call-session.js";
 import { childLogger } from "../lib/logger.js";
 import type { VoiceRuntimeConfig } from "../lib/config.js";
 import { base64ToBuffer, bufferToBase64 } from "../audio/formats.js";
+import { fetchCallSessionBootstrap } from "../lib/api-client.js";
 
 /** Exotel wants media chunks that are multiples of 320 bytes (20ms @ 8kHz PCM16). */
-const EXOTEL_FRAME_BYTES = 3200; // 100ms @ 8kHz PCM16
+const EXOTEL_FRAME_BYTES = 640; // 40ms — lower latency; no mid-speech silence pads
 
 /**
  * Voice gateway: bridges Exotel WebSocket media streams to CallSessions.
@@ -32,7 +33,6 @@ export class VoiceGateway {
     let streamSid: string | null = null;
     let callSid: string | null = null;
     let sessionId: string | null = null;
-    let outboundSeq = 0;
     let outboundBuf = Buffer.alloc(0);
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -44,7 +44,6 @@ export class VoiceGateway {
       while (outboundBuf.length >= EXOTEL_FRAME_BYTES) {
         const frame = outboundBuf.subarray(0, EXOTEL_FRAME_BYTES);
         outboundBuf = outboundBuf.subarray(EXOTEL_FRAME_BYTES);
-        outboundSeq += 1;
         const msg: TelephonyOutboundMedia = {
           event: "media",
           stream_sid: streamSid,
@@ -52,12 +51,11 @@ export class VoiceGateway {
         };
         socket.send(JSON.stringify(msg));
       }
+      // Never pad silence mid-utterance — that causes audible gaps.
       if (padLast && outboundBuf.length > 0) {
-        // Only pad on end-of-burst flush — never pad every tiny Gemini chunk.
         const padded = Buffer.alloc(EXOTEL_FRAME_BYTES, 0);
         outboundBuf.copy(padded);
         outboundBuf = Buffer.alloc(0);
-        outboundSeq += 1;
         socket.send(
           JSON.stringify({
             event: "media",
@@ -85,13 +83,12 @@ export class VoiceGateway {
         }
         outboundBuf = Buffer.concat([outboundBuf, base64ToBuffer(payloadBase64)]);
         flushOutbound(false);
-        // If a partial frame remains, flush shortly so speech doesn't stall.
         if (flushTimer) clearTimeout(flushTimer);
         if (outboundBuf.length > 0) {
           flushTimer = setTimeout(() => {
             flushTimer = null;
-            flushOutbound(true);
-          }, 40);
+            flushOutbound(false);
+          }, 60);
         }
       },
       sendClear: () => {
@@ -110,6 +107,7 @@ export class VoiceGateway {
       },
       close: () => {
         if (flushTimer) clearTimeout(flushTimer);
+        flushOutbound(true);
         try {
           socket.close();
         } catch {
@@ -134,6 +132,11 @@ export class VoiceGateway {
     });
 
     socket.on("close", () => {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      flushOutbound(true);
       if (sessionId) {
         void this.sessions.shutdown(sessionId, "exotel_disconnect");
       }
@@ -178,36 +181,53 @@ export class VoiceGateway {
           params.CustomField ??
           params.customField ??
           start.callSid;
-        const organizationId =
-          params.organizationId ?? params.OrganizationId ?? "unknown";
-        const agentId = params.agentId ?? params.AgentId ?? "unknown";
-        const agentVersionId =
-          params.agentVersionId ?? params.AgentVersionId ?? "unknown";
-        const systemPrompt =
-          params.systemPrompt ??
-          "You are a helpful voice agent. Keep responses short.";
 
-        // Attach outbound handler BEFORE start so greeting audio is not dropped.
-        const session = await this.sessions.create(
+        let bootstrap;
+        try {
+          bootstrap = await fetchCallSessionBootstrap(callId);
+        } catch (err) {
+          this.log.error(
+            { err, callId },
+            "failed to load agent session; refusing generic prompt",
+          );
+          stream.close();
+          return;
+        }
+
+        this.log.info(
           {
             callId,
-            organizationId,
-            agentId,
-            agentVersionId,
-            campaignId: params.campaignId,
-            contactId: params.contactId,
-            direction: (params.direction as "inbound" | "outbound") ?? "inbound",
-            systemPrompt,
-            defaultLanguage: params.language ?? "en",
-            supportedLanguages: (params.supportedLanguages ?? "en")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-            voiceId: params.voiceId,
+            agentId: bootstrap.agentId,
+            agentName: bootstrap.agentName,
+            companyName: bootstrap.companyName,
+            promptChars: bootstrap.systemPrompt.length,
+            tools: bootstrap.enabledTools?.length ?? 0,
+          },
+          "agent session bootstrapped",
+        );
+
+        const session = await this.sessions.create(
+          {
+            callId: bootstrap.callId,
+            organizationId: bootstrap.organizationId,
+            agentId: bootstrap.agentId,
+            agentVersionId: bootstrap.agentVersionId,
+            campaignId: bootstrap.campaignId ?? params.campaignId,
+            contactId: bootstrap.contactId ?? params.contactId,
+            direction: bootstrap.direction,
+            systemPrompt: bootstrap.systemPrompt,
+            openingInstruction: bootstrap.openingInstruction,
+            enabledTools: bootstrap.enabledTools,
+            defaultLanguage: bootstrap.defaultLanguage,
+            supportedLanguages: bootstrap.supportedLanguages,
+            voiceId: bootstrap.voiceId,
             metadata: {
               streamSid: start.streamSid,
               providerCallSid: start.callSid,
               mediaFormat: start.mediaFormat,
+              agentName: bootstrap.agentName,
+              companyName: bootstrap.companyName,
+              agentPurpose: bootstrap.agentPurpose,
             },
           },
           {
@@ -257,10 +277,6 @@ export class VoiceGateway {
     }
   }
 
-  /**
-   * Control-plane WebSocket for session create/reconnect/debug without Exotel.
-   * Messages are JSON: { type, ... }.
-   */
   handleSessionSocket(socket: WebSocket): void {
     const log = childLogger({ component: "session-ws" });
 
@@ -271,24 +287,23 @@ export class VoiceGateway {
           const type = msg.type as string;
 
           if (type === "create") {
+            const callId = String(msg.callId);
+            const bootstrap = await fetchCallSessionBootstrap(callId);
             const session = await this.sessions.create(
               {
-                callId: String(msg.callId),
-                organizationId: String(msg.organizationId),
-                agentId: String(msg.agentId),
-                agentVersionId: String(msg.agentVersionId),
-                campaignId: msg.campaignId ? String(msg.campaignId) : undefined,
-                contactId: msg.contactId ? String(msg.contactId) : undefined,
-                direction:
-                  (msg.direction as "inbound" | "outbound") ?? "outbound",
-                systemPrompt: String(
-                  msg.systemPrompt ?? "You are a helpful voice agent.",
-                ),
-                defaultLanguage: String(msg.language ?? "en"),
-                supportedLanguages: Array.isArray(msg.supportedLanguages)
-                  ? (msg.supportedLanguages as string[])
-                  : ["en"],
-                voiceId: msg.voiceId ? String(msg.voiceId) : undefined,
+                callId: bootstrap.callId,
+                organizationId: bootstrap.organizationId,
+                agentId: bootstrap.agentId,
+                agentVersionId: bootstrap.agentVersionId,
+                campaignId: bootstrap.campaignId ?? undefined,
+                contactId: bootstrap.contactId ?? undefined,
+                direction: bootstrap.direction,
+                systemPrompt: bootstrap.systemPrompt,
+                openingInstruction: bootstrap.openingInstruction,
+                enabledTools: bootstrap.enabledTools,
+                defaultLanguage: bootstrap.defaultLanguage,
+                supportedLanguages: bootstrap.supportedLanguages,
+                voiceId: bootstrap.voiceId,
                 metadata: (msg.metadata as Record<string, unknown>) ?? {},
               },
               {

@@ -32,10 +32,19 @@ export const callsApi = {
     status?: string;
     campaignId?: string;
     agentId?: string;
+    direction?: "INBOUND" | "OUTBOUND";
   }) => http.get<CursorPage<Call>>(BASE, query),
   get: (id: string) => http.get<CallDetail>(`${BASE}/${id}`),
   events: (id: string) =>
     http.get<{ items: NonNullable<Call["events"]> }>(`${BASE}/${id}/events`),
   transcript: (id: string) =>
     http.get<{ turns: TranscriptTurn[] }>(`${BASE}/${id}/transcript`),
+  recording: (id: string) =>
+    http.get<{
+      id: string;
+      callId: string;
+      contentType: string;
+      durationSeconds?: number | null;
+      streamPath: string;
+    }>(`${BASE}/${id}/recording`),
 };

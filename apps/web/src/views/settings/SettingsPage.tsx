@@ -12,6 +12,7 @@ import {
   ErrorState,
   Field,
   Input,
+  Select,
   Skeleton,
   Tabs,
   TabsContent,
@@ -25,6 +26,7 @@ import {
   TR,
   useToast,
 } from "@/components/ui";
+import { useAgents } from "@/hooks/use-agents";
 import {
   useCreatePhoneNumber,
   useEnvironmentInfo,
@@ -32,6 +34,7 @@ import {
   useOrganizationSettings,
   usePhoneNumbers,
   useUpdateOrganizationSettings,
+  useUpdatePhoneNumber,
 } from "./hooks";
 
 export default function SettingsPage() {
@@ -39,6 +42,8 @@ export default function SettingsPage() {
   const updateOrg = useUpdateOrganizationSettings();
   const phones = usePhoneNumbers();
   const createPhone = useCreatePhoneNumber();
+  const updatePhone = useUpdatePhoneNumber();
+  const agents = useAgents({ limit: 100 });
   const members = useMembers();
   const environment = useEnvironmentInfo();
   const { toast } = useToast();
@@ -49,6 +54,7 @@ export default function SettingsPage() {
   const [retentionDays, setRetentionDays] = useState(365);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneLabel, setPhoneLabel] = useState("");
+  const [inboundAgentId, setInboundAgentId] = useState("");
 
   useEffect(() => {
     if (!org.data) return;
@@ -57,6 +63,10 @@ export default function SettingsPage() {
     setMaxConcurrentCalls(org.data.maxConcurrentCalls);
     setRetentionDays(org.data.retentionDays);
   }, [org.data]);
+
+  const supportAgents =
+    agents.data?.items.filter((a) => a.status === "PUBLISHED" || a.status === "DRAFT") ??
+    [];
 
   return (
     <Workspace>
@@ -137,6 +147,10 @@ export default function SettingsPage() {
 
           <TabsContent value="phones" className="space-y-4">
             <div className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">
+                Bind a published support agent to a number so inbound Exotel
+                calls use that agent&apos;s knowledge.
+              </p>
               <Field label="Phone number">
                 <Input
                   value={phoneNumber}
@@ -148,8 +162,21 @@ export default function SettingsPage() {
                 <Input
                   value={phoneLabel}
                   onChange={(e) => setPhoneLabel(e.target.value)}
-                  placeholder="Primary outbound"
+                  placeholder="Support inbound"
                 />
+              </Field>
+              <Field label="Inbound support agent">
+                <Select
+                  value={inboundAgentId}
+                  onChange={(e) => setInboundAgentId(e.target.value)}
+                >
+                  <option value="">None — outbound only</option>
+                  {supportAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name} ({agent.status})
+                    </option>
+                  ))}
+                </Select>
               </Field>
               <Button
                 loading={createPhone.isPending}
@@ -159,9 +186,11 @@ export default function SettingsPage() {
                     await createPhone.mutateAsync({
                       phoneNumber,
                       label: phoneLabel || undefined,
+                      agentId: inboundAgentId || null,
                     });
                     setPhoneNumber("");
                     setPhoneLabel("");
+                    setInboundAgentId("");
                     toast({ title: "Phone number added", variant: "success" });
                   } catch (err) {
                     toast({
@@ -194,6 +223,7 @@ export default function SettingsPage() {
                   <TR>
                     <TH>Number</TH>
                     <TH>Label</TH>
+                    <TH>Inbound agent</TH>
                     <TH>Provider</TH>
                     <TH>Active</TH>
                   </TR>
@@ -203,6 +233,39 @@ export default function SettingsPage() {
                     <TR key={phone.id}>
                       <TD>{phone.phoneNumber}</TD>
                       <TD>{phone.label || "—"}</TD>
+                      <TD>
+                        <Select
+                          className="min-w-[10rem]"
+                          value={phone.agentId || ""}
+                          disabled={updatePhone.isPending}
+                          onChange={async (e) => {
+                            try {
+                              await updatePhone.mutateAsync({
+                                id: phone.id,
+                                agentId: e.target.value || null,
+                              });
+                              toast({
+                                title: "Inbound agent updated",
+                                variant: "success",
+                              });
+                            } catch (err) {
+                              toast({
+                                title: "Update failed",
+                                description:
+                                  err instanceof Error ? err.message : undefined,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <option value="">None</option>
+                          {supportAgents.map((agent) => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </TD>
                       <TD>{phone.provider || "—"}</TD>
                       <TD>
                         <Badge

@@ -27,6 +27,15 @@ export const settingsApi = {
     http.post<PhoneNumber>("/api/v1/phone-numbers", body, {
       idempotencyKey: crypto.randomUUID(),
     }),
+  updatePhoneNumber: (
+    id: string,
+    body: {
+      phoneNumber?: string;
+      label?: string | null;
+      agentId?: string | null;
+      isActive?: boolean;
+    },
+  ) => http.patch<PhoneNumber>(`/api/v1/phone-numbers/${id}`, body),
   listMembers: () =>
     http.get<{ items: OrgMember[] }>("/api/v1/settings/members"),
   getEnvironment: () =>

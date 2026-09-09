@@ -42,6 +42,23 @@ export function useCreatePhoneNumber() {
   });
 }
 
+export function useUpdatePhoneNumber() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      phoneNumber?: string;
+      label?: string | null;
+      agentId?: string | null;
+      isActive?: boolean;
+    }) => settingsApi.updatePhoneNumber(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: settingsKeys.phones }),
+  });
+}
+
 export function useMembers() {
   return useQuery({
     queryKey: settingsKeys.members,

@@ -4,7 +4,7 @@ import { getConfig } from "@sonrat/config";
 import { db } from "@sonrat/database";
 import { AuthenticationError, NotFoundError, ValidationError } from "@sonrat/shared";
 import { z } from "zod";
-import { buildPromptFromDraft } from "../../integrations/ai/gemini/prompt-builder.js";
+import { buildPromptFromDraft, resolveFlowInstructions } from "../../integrations/ai/gemini/prompt-builder.js";
 import { createAiProvider } from "../../integrations/ai/gemini/index.js";
 import { ToolService } from "../../services/tool.service.js";
 import { CallStateService } from "../../services/call-state.service.js";
@@ -49,6 +49,11 @@ voice.post(
     });
     if (!call) throw new NotFoundError("Call");
 
+    const flowInstructions = await resolveFlowInstructions(
+      call.organizationId,
+      call.agentVersion.config,
+    );
+
     const runtime = buildPromptFromDraft(call.agentVersion.config, {
       customerName: body.customerName ?? call.contact?.name ?? "Customer",
       customerContext:
@@ -60,7 +65,28 @@ voice.post(
       organizationId: call.organizationId,
       agentId: call.agentId,
       agentVersionId: call.agentVersionId,
+      flowInstructions,
     });
+
+    const configJson = call.agentVersion.config as {
+      general?: { name?: string; purpose?: string };
+      company?: { companyName?: string };
+    };
+    const agentName = configJson.general?.name ?? call.agent.name ?? "Agent";
+    const companyName =
+      configJson.company?.companyName ?? "the company";
+    const agentPurpose = (configJson.general?.purpose ?? "sales") as
+      | "sales"
+      | "support"
+      | "whatsapp"
+      | "hybrid";
+    const direction =
+      call.direction === "INBOUND" ? ("inbound" as const) : ("outbound" as const);
+
+    const openingInstruction =
+      direction === "inbound" || agentPurpose === "support"
+        ? `You are ${agentName} from ${companyName} on a live support call. Greet briefly in the customer's language, state you are from ${companyName}, and ask how you can help with their issue. One short sentence only. Do not say you are Gemini or Google.`
+        : `You are ${agentName} from ${companyName} on a live outbound sales call. Greet briefly, introduce yourself and ${companyName}, and state why you are calling in one short natural sentence. Do not say you are Gemini or Google. Do not ask a generic "how can I help" unless the customer asks first.`;
 
     const ai = createAiProvider();
     const session = await ai.buildSessionConfig({
@@ -107,7 +133,18 @@ voice.post(
       callId: call.id,
       agentId: call.agentId,
       agentVersionId: call.agentVersionId,
+      campaignId: call.campaignId,
+      contactId: call.contactId,
+      direction,
+      systemPrompt: runtime.systemPrompt,
+      defaultLanguage: runtime.defaultLanguage,
+      supportedLanguages: runtime.supportedLanguages,
+      voiceId: runtime.voiceId,
       enabledTools: runtime.enabledTools,
+      agentName,
+      companyName,
+      agentPurpose,
+      openingInstruction,
       session,
     });
   },

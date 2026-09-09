@@ -15,7 +15,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
-import { useCall, useCallTranscript } from "./hooks";
+import { useCall, useCallTranscript, useCallRecording } from "./hooks";
 import { formatDate, formatDuration, titleCase } from "@/lib/utils";
 
 export default function CallDetailPage() {
@@ -23,6 +23,7 @@ export default function CallDetailPage() {
   const id = params.id;
   const call = useCall(id);
   const transcript = useCallTranscript(id);
+  const recording = useCallRecording(id);
 
   if (call.isLoading) {
     return (
@@ -97,6 +98,7 @@ export default function CallDetailPage() {
           <TabsList>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
+            <TabsTrigger value="recording">Recording</TabsTrigger>
             <TabsTrigger value="outcome">Outcome</TabsTrigger>
           </TabsList>
           <TabsContent value="timeline">
@@ -143,6 +145,31 @@ export default function CallDetailPage() {
             ) : (
               <p className="text-sm text-muted-foreground">
                 Transcript not available yet.
+              </p>
+            )}
+          </TabsContent>
+          <TabsContent value="recording">
+            {recording.isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : recording.data?.streamPath ? (
+              <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground">
+                  Duration:{" "}
+                  {formatDuration(recording.data.durationSeconds ?? data.durationSeconds)}
+                </p>
+                <audio
+                  controls
+                  className="w-full"
+                  src={recording.data.streamPath}
+                  preload="metadata"
+                >
+                  Your browser does not support audio playback.
+                </audio>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Recording not available yet. It appears after Exotel finishes the
+                call and our worker stores the audio.
               </p>
             )}
           </TabsContent>

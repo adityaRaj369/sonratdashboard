@@ -126,6 +126,7 @@ model Organization {
   idempotencyKeys       IdempotencyKey[]
   outboxEvents          OutboxEvent[]
   toolExecutions        ToolExecution[]
+  agentFlows            AgentFlow[]
 
   @@index([createdAt])
 }
@@ -236,6 +237,42 @@ model AgentVersion {
 
   @@unique([agentId, versionNumber])
   @@index([organizationId, agentId])
+}
+
+model AgentFlow {
+  id               String      @id @default(uuid()) @db.Uuid
+  organizationId   String      @db.Uuid
+  name             String
+  description      String?
+  status           AgentStatus @default(DRAFT)
+  draftGraph       Json        @default("{\"nodes\":[],\"edges\":[]}")
+  activeVersionId  String?     @db.Uuid
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions         AgentFlowVersion[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model AgentFlowVersion {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  flowId         String             @db.Uuid
+  versionNumber  Int
+  status         AgentVersionStatus @default(DRAFT)
+  graph          Json
+  publishedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  flow           AgentFlow          @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@unique([flowId, versionNumber])
+  @@index([organizationId, flowId])
 }
 
 model Contact {

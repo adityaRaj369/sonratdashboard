@@ -26,12 +26,16 @@ function parseParams(path: string): Record<string, string> {
     params.id = parts[1];
     if (parts[2]) params.section = parts[2];
   }
-  // /campaigns/:id/...
-  if (parts[0] === "campaigns" && parts[1] && parts[1] !== "new") {
+  // /campaigns/:id/... or /sales/:id/...
+  if (
+    (parts[0] === "campaigns" || parts[0] === "sales") &&
+    parts[1] &&
+    parts[1] !== "new"
+  ) {
     params.id = parts[1];
   }
-  // /calls/:id
-  if (parts[0] === "calls" && parts[1]) {
+  // /calls/:id or /support/:id
+  if ((parts[0] === "calls" || parts[0] === "support") && parts[1]) {
     params.id = parts[1];
   }
   // /contacts — no id routes currently

@@ -92,8 +92,16 @@ export class MockAiSession implements AiSession {
         language: this.params.language,
         confidence: 0.92,
       });
-      // One short beep + greeting — not a looping melody
-      this.speak("Hi, thanks for picking up. How can I help you today?", 1);
+      const greet =
+        this.params.systemInstruction.match(
+          /You are ([^,]+), an AI voice agent operating on behalf of ([^.]+)\./,
+        );
+      const name = greet?.[1]?.trim() || "your company agent";
+      const company = greet?.[2]?.trim() || "our company";
+      this.speak(
+        `Hi, this is ${name} from ${company}. I'm calling regarding our offer — do you have a quick moment?`,
+        1,
+      );
       return;
     }
 
@@ -125,10 +133,19 @@ export class MockAiSession implements AiSession {
   }
 
   async sendText(text: string): Promise<void> {
-    if (text === "__session_start__") {
+    if (text === "__session_start__" || text.startsWith("You are ")) {
       if (this.greeted) return;
       this.greeted = true;
-      this.speak("Hi, thanks for picking up. How can I help you today?", 1);
+      const greet =
+        this.params.systemInstruction.match(
+          /You are ([^,]+), an AI voice agent operating on behalf of ([^.]+)\./,
+        );
+      const name = greet?.[1]?.trim() || "your company agent";
+      const company = greet?.[2]?.trim() || "our company";
+      this.speak(
+        `Hi, this is ${name} from ${company}. I'm calling regarding our offer — do you have a quick moment?`,
+        1,
+      );
       return;
     }
     if (Date.now() - this.lastSpeakAt < this.replyGapMs) return;

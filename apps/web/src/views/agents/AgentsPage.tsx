@@ -37,7 +37,7 @@ export default function AgentsPage() {
     <Workspace>
       <WorkspaceHeader
         title="Agents"
-        description="Configure AI voice agents for sales and support"
+        description="Train AI agents with company knowledge for sales, support, and WhatsApp"
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />

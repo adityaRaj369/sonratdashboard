@@ -26,12 +26,35 @@ export const agentsApi = {
   list: (query?: { cursor?: string; limit?: number; search?: string }) =>
     http.get<CursorPage<Agent>>(BASE, query),
   get: (id: string) => http.get<Agent>(`${BASE}/${id}`),
-  create: (body: { name: string; description?: string }) =>
+  create: (body: {
+    name: string;
+    description?: string;
+    purpose?: "sales" | "support" | "whatsapp" | "hybrid";
+  }) =>
     http.post<Agent>(BASE, body, { idempotencyKey: crypto.randomUUID() }),
   update: (id: string, body: { name?: string; description?: string }) =>
     http.patch<Agent>(`${BASE}/${id}`, body),
   updateSection: (id: string, section: AgentSection, data: unknown) =>
     http.patch<Agent>(`${BASE}/${id}/sections/${section}`, { data }),
+  uploadKnowledgeDocument: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return http.upload<{
+      document: {
+        id: string;
+        fileName: string;
+        objectKey: string;
+        contentType: string;
+        extractedText: string;
+        uploadedAt: string;
+      };
+      knowledge: unknown;
+    }>(`${BASE}/${id}/knowledge/documents`, form);
+  },
+  removeKnowledgeDocument: (id: string, documentId: string) =>
+    http.delete<{ knowledge: unknown }>(
+      `${BASE}/${id}/knowledge/documents/${documentId}`,
+    ),
   validate: (id: string) =>
     http.post<ValidationReport>(`${BASE}/${id}/validate`),
   publish: (id: string) =>

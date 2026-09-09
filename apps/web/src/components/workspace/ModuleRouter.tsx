@@ -14,6 +14,14 @@ const CampaignDetailPage = lazy(() => import("@/views/campaigns/CampaignDetailPa
 const CampaignContactsPage = lazy(() => import("@/views/campaigns/CampaignContactsPage"));
 const CampaignCallsPage = lazy(() => import("@/views/campaigns/CampaignCallsPage"));
 const CampaignResultsPage = lazy(() => import("@/views/campaigns/CampaignResultsPage"));
+const SupportCallsPage = lazy(() => import("@/views/support/SupportCallsPage"));
+const SupportCallDetailPage = lazy(() => import("@/views/support/SupportCallDetailPage"));
+const WhatsAppPage = lazy(() => import("@/views/whatsapp/WhatsAppPage"));
+const SalesOutboundCallsPage = lazy(
+  () => import("@/views/sales/SalesOutboundCallsPage"),
+);
+const AgentFlowsPage = lazy(() => import("@/views/flows/AgentFlowsPage"));
+const AgentFlowDetailPage = lazy(() => import("@/views/flows/AgentFlowDetailPage"));
 const ContactsPage = lazy(() => import("@/views/contacts/ContactsPage"));
 const ContactsImportPage = lazy(() => import("@/views/contacts/ContactsImportPage"));
 const CallsPage = lazy(() => import("@/views/calls/CallsPage"));
@@ -29,8 +37,8 @@ function usePrefetchModules() {
       void import("@/views/dashboard/DashboardPage");
       void import("@/views/agents/AgentsPage");
       void import("@/views/campaigns/CampaignsPage");
-      void import("@/views/contacts/ContactsPage");
-      void import("@/views/calls/CallsPage");
+      void import("@/views/support/SupportCallsPage");
+      void import("@/views/whatsapp/WhatsAppPage");
       void import("@/views/analytics/AnalyticsPage");
       void import("@/views/settings/SettingsPage");
     };
@@ -51,6 +59,13 @@ function ModuleFallback() {
   );
 }
 
+/** Map /sales/* → campaign engine routes (same dialer, Sales product name). */
+function salesToCampaignPath(path: string): string {
+  if (path === "/sales" || path === "/sales/") return "/campaigns";
+  if (path.startsWith("/sales/")) return path.replace(/^\/sales/, "/campaigns");
+  return path;
+}
+
 function matchRoute(path: string): { perm?: string; node: React.ReactNode } {
   if (path === "/" || path === "/dashboard") {
     return { node: <DashboardPage /> };
@@ -64,24 +79,53 @@ function matchRoute(path: string): { perm?: string; node: React.ReactNode } {
   if (/^\/agents\/[^/]+$/.test(path)) {
     return { perm: "agents.show_menu", node: <AgentDetailPage /> };
   }
-  if (path === "/campaigns") {
-    return { perm: "campaigns.show_menu", node: <CampaignsPage /> };
+
+  if (path === "/support") {
+    return { perm: "calls.show_menu", node: <SupportCallsPage /> };
   }
-  if (path === "/campaigns/new") {
-    return { perm: "campaigns.show_menu", node: <CampaignCreatePage /> };
+  if (/^\/support\/[^/]+$/.test(path)) {
+    return { perm: "calls.show_menu", node: <SupportCallDetailPage /> };
   }
-  if (/^\/campaigns\/[^/]+\/contacts$/.test(path)) {
-    return { perm: "campaigns.show_menu", node: <CampaignContactsPage /> };
+
+  if (path === "/whatsapp") {
+    return { perm: "agents.show_menu", node: <WhatsAppPage /> };
   }
-  if (/^\/campaigns\/[^/]+\/calls$/.test(path)) {
-    return { perm: "campaigns.show_menu", node: <CampaignCallsPage /> };
+
+  if (path === "/flows") {
+    return { perm: "agents.show_menu", node: <AgentFlowsPage /> };
   }
-  if (/^\/campaigns\/[^/]+\/results$/.test(path)) {
-    return { perm: "campaigns.show_menu", node: <CampaignResultsPage /> };
+  if (/^\/flows\/[^/]+$/.test(path)) {
+    return { perm: "agents.show_menu", node: <AgentFlowDetailPage /> };
   }
-  if (/^\/campaigns\/[^/]+$/.test(path)) {
-    return { perm: "campaigns.show_menu", node: <CampaignDetailPage /> };
+
+  if (path === "/sales/calls") {
+    return { perm: "campaigns.show_menu", node: <SalesOutboundCallsPage /> };
   }
+
+  // Sales product surface (reuses campaign dialer — do not delete campaign jobs)
+  const salesMapped = salesToCampaignPath(path);
+  if (path.startsWith("/sales") || path.startsWith("/campaigns")) {
+    const p = salesMapped;
+    if (p === "/campaigns") {
+      return { perm: "campaigns.show_menu", node: <CampaignsPage /> };
+    }
+    if (p === "/campaigns/new") {
+      return { perm: "campaigns.show_menu", node: <CampaignCreatePage /> };
+    }
+    if (/^\/campaigns\/[^/]+\/contacts$/.test(p)) {
+      return { perm: "campaigns.show_menu", node: <CampaignContactsPage /> };
+    }
+    if (/^\/campaigns\/[^/]+\/calls$/.test(p)) {
+      return { perm: "campaigns.show_menu", node: <CampaignCallsPage /> };
+    }
+    if (/^\/campaigns\/[^/]+\/results$/.test(p)) {
+      return { perm: "campaigns.show_menu", node: <CampaignResultsPage /> };
+    }
+    if (/^\/campaigns\/[^/]+$/.test(p)) {
+      return { perm: "campaigns.show_menu", node: <CampaignDetailPage /> };
+    }
+  }
+
   if (path === "/contacts") {
     return { perm: "contacts.show_menu", node: <ContactsPage /> };
   }
@@ -100,20 +144,31 @@ function matchRoute(path: string): { perm?: string; node: React.ReactNode } {
   if (path === "/settings") {
     return { perm: "settings.show_menu", node: <SettingsPage /> };
   }
-  if (path === "/admin") {
+  if (path === "/admin" || path.startsWith("/admin/")) {
     return { perm: "adminconsole.show_menu", node: <AdminConsolePage /> };
   }
-  return { node: <DashboardPage /> };
+
+  return {
+    node: (
+      <div className="p-8 text-sm text-slate-500">
+        Page not found for <code>{path}</code>
+      </div>
+    ),
+  };
 }
 
-/** Instant SPA module switcher â€” lazy chunks cached after first open. */
 export default function ModuleRouter() {
+  usePrefetchModules();
   const path = useWorkspacePath();
   const matched = matchRoute(path);
-  usePrefetchModules();
+
   return (
-    <PermissionGate permission={matched.perm}>
-      <Suspense fallback={<ModuleFallback />}>{matched.node}</Suspense>
-    </PermissionGate>
+    <Suspense fallback={<ModuleFallback />}>
+      {matched.perm ? (
+        <PermissionGate permission={matched.perm}>{matched.node}</PermissionGate>
+      ) : (
+        matched.node
+      )}
+    </Suspense>
   );
 }

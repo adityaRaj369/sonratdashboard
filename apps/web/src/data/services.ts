@@ -2,17 +2,18 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Bot,
+  GitBranch,
+  Headset,
   Megaphone,
-  PhoneCall,
+  MessageCircle,
   Settings,
   UserCog,
-  Users,
 } from "lucide-react";
 import { SERVICE_SUBPAGES } from "./serviceSubpages";
 
 /**
- * SEAM-compatible service registry.
- * Home is NOT a service — it is a separate sidebar action (like max-casino `/`).
+ * Product modules for company dashboards:
+ * Agents (train) → Support / Sales / WhatsApp (use agents)
  */
 export interface ServiceDefinition {
   key: string;
@@ -31,40 +32,50 @@ const services: ServiceDefinition[] = [
     title: "Agents",
     route: "/agents",
     icon: Bot,
-    description: "Configure and publish voice agents",
+    description: "Train AI agents with company knowledge",
     permission: "agents.show_menu",
     group: "Workspace",
     subpages: SERVICE_SUBPAGES.agents,
   },
   {
-    key: "campaigns",
-    title: "Campaigns",
-    route: "/campaigns",
-    icon: Megaphone,
-    description: "Outbound campaign orchestration",
-    permission: "campaigns.show_menu",
+    key: "flows",
+    title: "Flows",
+    route: "/flows",
+    icon: GitBranch,
+    description: "Conversation graphs for agents",
+    permission: "agents.show_menu",
     group: "Workspace",
-    subpages: SERVICE_SUBPAGES.campaigns,
+    subpages: [{ key: "list", label: "All flows", route: "/flows", permission: "agents.read" }],
   },
   {
-    key: "contacts",
-    title: "Contacts",
-    route: "/contacts",
-    icon: Users,
-    description: "Contact directory and imports",
-    permission: "contacts.show_menu",
-    group: "Workspace",
-    subpages: SERVICE_SUBPAGES.contacts,
-  },
-  {
-    key: "calls",
-    title: "Calls",
-    route: "/calls",
-    icon: PhoneCall,
-    description: "Live and historical call records",
+    key: "customer-support",
+    title: "Customer Support",
+    route: "/support",
+    icon: Headset,
+    description: "Inbound support calls and conversations",
     permission: "calls.show_menu",
     group: "Workspace",
-    subpages: SERVICE_SUBPAGES.calls,
+    subpages: SERVICE_SUBPAGES["customer-support"],
+  },
+  {
+    key: "sales",
+    title: "Sales",
+    route: "/sales",
+    icon: Megaphone,
+    description: "Bulk outbound sales calls from uploaded lists",
+    permission: "campaigns.show_menu",
+    group: "Workspace",
+    subpages: SERVICE_SUBPAGES.sales,
+  },
+  {
+    key: "whatsapp",
+    title: "WhatsApp",
+    route: "/whatsapp",
+    icon: MessageCircle,
+    description: "Connect WhatsApp and map a trained agent",
+    permission: "agents.show_menu",
+    group: "Workspace",
+    subpages: SERVICE_SUBPAGES.whatsapp,
   },
   {
     key: "analytics",

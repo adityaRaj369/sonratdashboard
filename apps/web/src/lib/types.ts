@@ -245,7 +245,7 @@ export type OrganizationSettings = {
   timezone: string;
   maxConcurrentCalls: number;
   retentionDays: number;
-  featureFlags: Record<string, boolean>;
+  featureFlags: Record<string, unknown>;
 };
 
 export type OrgMember = {
