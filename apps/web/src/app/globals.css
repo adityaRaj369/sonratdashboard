@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 20% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --muted: 210 20% 96%;
+  --muted-foreground: 215 16% 40%;
+  --primary: 215 70% 28%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 18% 93%;
+  --secondary-foreground: 222 47% 11%;
+  --accent: 199 70% 42%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 152 55% 36%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 45%;
+  --warning-foreground: 222 47% 11%;
+  --border: 214 20% 88%;
+  --input: 214 20% 88%;
+  --ring: 215 70% 28%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 20% 90%;
+  --sidebar-accent: 210 25% 96%;
+  --sidebar-muted: 215 16% 45%;
+  --radius: 0.5rem;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Sans", "IBM Plex Sans", sans-serif;
+}
+
+.dark {
+  --background: 222 30% 8%;
+  --foreground: 210 30% 96%;
+  --card: 222 28% 11%;
+  --card-foreground: 210 30% 96%;
+  --muted: 222 20% 16%;
+  --muted-foreground: 215 15% 65%;
+  --primary: 205 80% 58%;
+  --primary-foreground: 222 47% 8%;
+  --secondary: 222 18% 18%;
+  --secondary-foreground: 210 30% 96%;
+  --accent: 199 70% 48%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 70% 52%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 16% 22%;
+  --input: 222 16% 22%;
+  --ring: 205 80% 58%;
+  --sidebar: 222 30% 9%;
+  --sidebar-foreground: 210 30% 96%;
+  --sidebar-border: 222 16% 18%;
+  --sidebar-accent: 222 20% 14%;
+  --sidebar-muted: 215 12% 60%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer utilities {
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}
+
+/* SEAM invert / dark workspace mode */
+html.seam-invert-mode {
+  filter: invert(1) hue-rotate(180deg);
+}
+html.seam-invert-mode img,
+html.seam-invert-mode video,
+html.seam-invert-mode canvas {
+  filter: invert(1) hue-rotate(180deg);
+}

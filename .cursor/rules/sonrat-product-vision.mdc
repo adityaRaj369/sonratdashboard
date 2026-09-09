@@ -1,0 +1,36 @@
+---
+description: Master production Voice AI SaaS architecture and phase discipline. One phase at a time; no skipping; no fake production claims.
+alwaysApply: true
+---
+
+# Sonrat Master System — binding rules
+
+Follow `docs/PHASE0_ARCHITECTURE.md` and the MASTER SYSTEM PROMPT.
+
+## Role
+Principal architect + staff eng across backend, realtime, frontend, DevOps, security, QA. Build a **real multi-tenant production SaaS**, not a demo.
+
+## V1 providers (behind abstractions only)
+- AI: `AIProvider` → `GeminiProvider` (Gemini Live). No self-hosted LLM/GPU in V1.
+- Telephony: `TelephonyProvider` → `ExotelProvider`. Capacity configurable, never hardcoded myths.
+- Later: Sarvam/Local AI; other telephony — without rewriting Call Runtime.
+
+## Planes (never mix)
+Dashboard → API control plane only.
+Realtime audio: Exotel → Voice Edge → Call Runtime → AI/Flow/Tools — never via API, Kafka, or Postgres.
+Async: Kafka (events/work) → workers. Analytics: ClickHouse. Blobs: S3.
+
+## Product modules
+Organizations, Agents, Agent Flows, Sales/Campaigns, Customer Support, WhatsApp, Calls, Recordings, Analytics, Knowledge, Usage, Billing, Settings, Admin.
+
+## Phase discipline
+- Do NOT implement all phases at once.
+- On `START PHASE N`: implement ONLY that phase.
+- After each phase: report STATUS, files, DB, events, APIs, tests, issues, NEXT.
+- STOP and fix if tests fail.
+- Never say "production ready" without passing relevant tests.
+- Do not blindly overwrite; inspect existing code; evolve toward target structure.
+
+## Code quality
+No god classes, no provider logic in domain, no hardcoded org workflows, no fake Gemini/Exotel success in production paths. Mocks for tests only.
+---

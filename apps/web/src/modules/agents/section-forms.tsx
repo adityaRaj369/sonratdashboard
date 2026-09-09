@@ -1,0 +1,1034 @@
+"use client";
+
+import * as React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  agentCallBehaviorSchema,
+  agentCompanySchema,
+  agentGeneralSchema,
+  agentLanguageSchema,
+  agentPersonalitySchema,
+  agentSafetySchema,
+  agentSalesSchema,
+  agentSupportSchema,
+  agentToolsSchema,
+  agentVoiceSchema,
+} from "@sonrat/shared";
+import { z } from "zod";
+import { Button, Field, Input, Select, Textarea, useToast } from "@/components/ui";
+import { useUpdateAgentSection } from "@/hooks/use-agents";
+import type { AgentSection } from "@/services/api/agents";
+
+function StringListEditor({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = React.useState("");
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          placeholder={placeholder || "Add item"}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (!draft.trim()) return;
+              onChange([...value, draft.trim()]);
+              setDraft("");
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (!draft.trim()) return;
+            onChange([...value, draft.trim()]);
+            setDraft("");
+          }}
+        >
+          Add
+        </Button>
+      </div>
+      <ul className="space-y-1">
+        {value.map((item, idx) => (
+          <li
+            key={`${item}-${idx}`}
+            className="flex items-center justify-between rounded-md border border-border px-2 py-1.5 text-sm"
+          >
+            <span>{item}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+            >
+              Remove
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SectionFormShell({
+  dirty,
+  saving,
+  onSave,
+  children,
+}: {
+  dirty: boolean;
+  saving: boolean;
+  onSave: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave();
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {dirty ? "Unsaved changes" : "All changes saved"}
+        </p>
+        <Button type="submit" loading={saving} disabled={!dirty}>
+          Save section
+        </Button>
+      </div>
+      {children}
+    </form>
+  );
+}
+
+type SectionProps = {
+  agentId: string;
+  initialData: unknown;
+};
+
+export function GeneralSection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const form = useForm<z.infer<typeof agentGeneralSchema>>({
+    resolver: zodResolver(agentGeneralSchema),
+    defaultValues: (initialData as z.infer<typeof agentGeneralSchema>) || {
+      name: "",
+      role: "",
+      purpose: "sales",
+    },
+  });
+
+  React.useEffect(() => {
+    if (initialData) form.reset(initialData as z.infer<typeof agentGeneralSchema>);
+  }, [initialData, form]);
+
+  return (
+    <SectionFormShell
+      dirty={form.formState.isDirty}
+      saving={update.isPending}
+      onSave={form.handleSubmit(async (values) => {
+        try {
+          await update.mutateAsync({ section: "general", data: values });
+          form.reset(values);
+          toast({ title: "General saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      })}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name" error={form.formState.errors.name?.message}>
+          <Input {...form.register("name")} />
+        </Field>
+        <Field label="Role" error={form.formState.errors.role?.message}>
+          <Input {...form.register("role")} />
+        </Field>
+        <Field label="Industry">
+          <Input {...form.register("industry")} />
+        </Field>
+        <Field label="Purpose">
+          <Select {...form.register("purpose")}>
+            <option value="sales">Sales</option>
+            <option value="support">Support</option>
+            <option value="hybrid">Hybrid</option>
+          </Select>
+        </Field>
+        <Field label="Description" className="sm:col-span-2">
+          <Textarea {...form.register("description")} />
+        </Field>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function CompanySection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const form = useForm<z.infer<typeof agentCompanySchema>>({
+    resolver: zodResolver(agentCompanySchema),
+    defaultValues: (initialData as z.infer<typeof agentCompanySchema>) || {
+      companyName: "",
+      timezone: "UTC",
+      businessHours: [],
+      locations: [],
+    },
+  });
+
+  React.useEffect(() => {
+    if (initialData) form.reset(initialData as z.infer<typeof agentCompanySchema>);
+  }, [initialData, form]);
+
+  return (
+    <SectionFormShell
+      dirty={form.formState.isDirty}
+      saving={update.isPending}
+      onSave={form.handleSubmit(async (values) => {
+        try {
+          await update.mutateAsync({ section: "company", data: values });
+          form.reset(values);
+          toast({ title: "Company saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      })}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Company name" error={form.formState.errors.companyName?.message}>
+          <Input {...form.register("companyName")} />
+        </Field>
+        <Field label="Website">
+          <Input {...form.register("website")} />
+        </Field>
+        <Field label="Contact email">
+          <Input {...form.register("contactEmail")} />
+        </Field>
+        <Field label="Contact phone">
+          <Input {...form.register("contactPhone")} />
+        </Field>
+        <Field label="Timezone">
+          <Input {...form.register("timezone")} />
+        </Field>
+        <Field label="Address">
+          <Input {...form.register("address")} />
+        </Field>
+        <Field label="Description" className="sm:col-span-2">
+          <Textarea {...form.register("companyDescription")} />
+        </Field>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function PersonalitySection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const form = useForm<z.infer<typeof agentPersonalitySchema>>({
+    resolver: zodResolver(agentPersonalitySchema),
+    defaultValues: (initialData as z.infer<typeof agentPersonalitySchema>) || {
+      personality: "",
+      tone: "",
+      friendliness: 7,
+      professionalism: 8,
+      verbosity: "concise",
+      speakingStyle: "",
+    },
+  });
+
+  React.useEffect(() => {
+    if (initialData) form.reset(initialData as z.infer<typeof agentPersonalitySchema>);
+  }, [initialData, form]);
+
+  return (
+    <SectionFormShell
+      dirty={form.formState.isDirty}
+      saving={update.isPending}
+      onSave={form.handleSubmit(async (values) => {
+        try {
+          await update.mutateAsync({ section: "personality", data: values });
+          form.reset(values);
+          toast({ title: "Personality saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      })}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Personality">
+          <Input {...form.register("personality")} />
+        </Field>
+        <Field label="Tone">
+          <Input {...form.register("tone")} />
+        </Field>
+        <Field label="Speaking style">
+          <Input {...form.register("speakingStyle")} />
+        </Field>
+        <Field label="Verbosity">
+          <Select {...form.register("verbosity")}>
+            <option value="concise">Concise</option>
+            <option value="balanced">Balanced</option>
+            <option value="detailed">Detailed</option>
+          </Select>
+        </Field>
+        <Field label="Friendliness (1-10)">
+          <Input type="number" min={1} max={10} {...form.register("friendliness", { valueAsNumber: true })} />
+        </Field>
+        <Field label="Professionalism (1-10)">
+          <Input type="number" min={1} max={10} {...form.register("professionalism", { valueAsNumber: true })} />
+        </Field>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function VoiceSection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const form = useForm<z.infer<typeof agentVoiceSchema>>({
+    resolver: zodResolver(agentVoiceSchema),
+    defaultValues: (initialData as z.infer<typeof agentVoiceSchema>) || {
+      voiceProvider: "gemini",
+      voiceId: "Puck",
+      voiceGender: "neutral",
+      language: "en",
+    },
+  });
+
+  React.useEffect(() => {
+    if (initialData) form.reset(initialData as z.infer<typeof agentVoiceSchema>);
+  }, [initialData, form]);
+
+  return (
+    <SectionFormShell
+      dirty={form.formState.isDirty}
+      saving={update.isPending}
+      onSave={form.handleSubmit(async (values) => {
+        try {
+          await update.mutateAsync({ section: "voice", data: values });
+          form.reset(values);
+          toast({ title: "Voice saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      })}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Voice ID">
+          <Select {...form.register("voiceId")}>
+            <option value="Puck">Puck</option>
+            <option value="Charon">Charon</option>
+            <option value="Kore">Kore</option>
+            <option value="Fenrir">Fenrir</option>
+            <option value="Aoede">Aoede</option>
+          </Select>
+        </Field>
+        <Field label="Gender">
+          <Select {...form.register("voiceGender")}>
+            <option value="neutral">Neutral</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+          </Select>
+        </Field>
+        <Field label="Language">
+          <Input {...form.register("language")} />
+        </Field>
+        <Field label="Style">
+          <Input {...form.register("style")} />
+        </Field>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function LanguagesSection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const defaults = React.useMemo<z.infer<typeof agentLanguageSchema>>(
+    () => ({
+      supportedLanguages: ["en"],
+      defaultLanguage: "en",
+      languageDetection: true,
+      languageSwitching: true,
+      fallbackLanguage: "en",
+    }),
+    [],
+  );
+  const data = (initialData as z.infer<typeof agentLanguageSchema>) || defaults;
+  const [values, setValues] = React.useState(data);
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    setValues((initialData as z.infer<typeof agentLanguageSchema>) || defaults);
+    setDirty(false);
+  }, [initialData, defaults]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        const parsed = agentLanguageSchema.safeParse(values);
+        if (!parsed.success) {
+          toast({ title: "Invalid languages config", variant: "destructive" });
+          return;
+        }
+        try {
+          await update.mutateAsync({ section: "languages", data: parsed.data });
+          setDirty(false);
+          toast({ title: "Languages saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <Field label="Supported languages">
+        <StringListEditor
+          value={values.supportedLanguages}
+          onChange={(supportedLanguages) => {
+            setValues((v) => ({ ...v, supportedLanguages }));
+            setDirty(true);
+          }}
+          placeholder="en"
+        />
+      </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Default language">
+          <Input
+            value={values.defaultLanguage}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, defaultLanguage: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Fallback language">
+          <Input
+            value={values.fallbackLanguage}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, fallbackLanguage: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={values.languageDetection}
+          onChange={(e) => {
+            setValues((v) => ({ ...v, languageDetection: e.target.checked }));
+            setDirty(true);
+          }}
+        />
+        Language detection
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={values.languageSwitching}
+          onChange={(e) => {
+            setValues((v) => ({ ...v, languageSwitching: e.target.checked }));
+            setDirty(true);
+          }}
+        />
+        Allow mid-call language switching
+      </label>
+    </SectionFormShell>
+  );
+}
+
+function ArraySection({
+  agentId,
+  section,
+  schema,
+  initialData,
+  fields,
+}: {
+  agentId: string;
+  section: AgentSection;
+  schema: z.ZodTypeAny;
+  initialData: unknown;
+  fields: Array<{ key: string; label: string; type?: "text" | "textarea" | "list" }>;
+}) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  const [values, setValues] = React.useState<Record<string, unknown>>(
+    (initialData as Record<string, unknown>) || {},
+  );
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    setValues((initialData as Record<string, unknown>) || {});
+    setDirty(false);
+  }, [initialData]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        const parsed = schema.safeParse(values);
+        if (!parsed.success) {
+          toast({ title: "Validation failed", variant: "destructive" });
+          return;
+        }
+        try {
+          await update.mutateAsync({ section, data: parsed.data });
+          setDirty(false);
+          toast({ title: "Section saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <div className="space-y-3">
+        {fields.map((field) => (
+          <Field key={field.key} label={field.label}>
+            {field.type === "list" ? (
+              <StringListEditor
+                value={(values[field.key] as string[]) || []}
+                onChange={(next) => {
+                  setValues((v) => ({ ...v, [field.key]: next }));
+                  setDirty(true);
+                }}
+              />
+            ) : field.type === "textarea" ? (
+              <Textarea
+                value={(values[field.key] as string) || ""}
+                onChange={(e) => {
+                  setValues((v) => ({ ...v, [field.key]: e.target.value }));
+                  setDirty(true);
+                }}
+              />
+            ) : (
+              <Input
+                value={(values[field.key] as string) || ""}
+                onChange={(e) => {
+                  setValues((v) => ({ ...v, [field.key]: e.target.value }));
+                  setDirty(true);
+                }}
+              />
+            )}
+          </Field>
+        ))}
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function SalesSection(props: SectionProps) {
+  return (
+    <ArraySection
+      {...props}
+      section="sales"
+      schema={agentSalesSchema}
+      fields={[
+        { key: "primaryObjective", label: "Primary objective" },
+        { key: "closingBehavior", label: "Closing behavior", type: "textarea" },
+        { key: "secondaryObjectives", label: "Secondary objectives", type: "list" },
+        { key: "qualificationQuestions", label: "Qualification questions", type: "list" },
+        { key: "discoveryQuestions", label: "Discovery questions", type: "list" },
+        { key: "offers", label: "Offers", type: "list" },
+        { key: "objectionHandling", label: "Objection handling", type: "list" },
+        { key: "leadQualificationRules", label: "Lead qualification rules", type: "list" },
+      ]}
+    />
+  );
+}
+
+export function SupportSection(props: SectionProps) {
+  return (
+    <ArraySection
+      {...props}
+      section="support"
+      schema={agentSupportSchema}
+      fields={[
+        { key: "supportWorkflows", label: "Support workflows", type: "list" },
+        { key: "escalationRules", label: "Escalation rules", type: "list" },
+        { key: "humanHandoffRules", label: "Human handoff rules", type: "list" },
+        { key: "prohibitedAnswers", label: "Prohibited answers", type: "list" },
+        { key: "issueCategories", label: "Issue categories", type: "list" },
+      ]}
+    />
+  );
+}
+
+export function SafetySection(props: SectionProps) {
+  return (
+    <ArraySection
+      {...props}
+      section="safety"
+      schema={agentSafetySchema}
+      fields={[
+        { key: "prohibitedTopics", label: "Prohibited topics", type: "list" },
+        { key: "unsupportedClaims", label: "Unsupported claims", type: "list" },
+        { key: "privacyBehavior", label: "Privacy behavior", type: "textarea" },
+        { key: "sensitiveInformationRules", label: "Sensitive information rules", type: "list" },
+        { key: "escalationRequirements", label: "Escalation requirements", type: "list" },
+      ]}
+    />
+  );
+}
+
+export function CallBehaviorSection(props: SectionProps) {
+  const update = useUpdateAgentSection(props.agentId);
+  const { toast } = useToast();
+  type CallBehavior = z.infer<typeof agentCallBehaviorSchema>;
+  const defaults: CallBehavior = {
+    greeting: "",
+    interruptionHandling: "Stop speaking immediately and listen.",
+    silenceBehavior: "Ask a brief clarifying question after 5 seconds.",
+    closing: "",
+    maximumCallDurationSeconds: 600,
+    callbackBehavior: "",
+    callEndRules: [],
+  };
+  const [values, setValues] = React.useState<CallBehavior>(
+    (props.initialData as CallBehavior) || defaults,
+  );
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    setValues((props.initialData as CallBehavior) || defaults);
+    setDirty(false);
+    // defaults is stable module-level config for this section
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.initialData]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        const parsed = agentCallBehaviorSchema.safeParse(values);
+        if (!parsed.success) {
+          toast({
+            title: "Validation failed",
+            description: parsed.error.issues.map((i) => i.message).join("; "),
+            variant: "destructive",
+          });
+          return;
+        }
+        try {
+          await update.mutateAsync({
+            section: "callBehavior",
+            data: parsed.data,
+          });
+          setDirty(false);
+          toast({ title: "Call behavior saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <div className="space-y-3">
+        <Field label="Greeting">
+          <Textarea
+            value={values.greeting}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, greeting: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Interruption handling">
+          <Textarea
+            value={values.interruptionHandling}
+            onChange={(e) => {
+              setValues((v) => ({
+                ...v,
+                interruptionHandling: e.target.value,
+              }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Silence behavior">
+          <Textarea
+            value={values.silenceBehavior}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, silenceBehavior: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Closing">
+          <Textarea
+            value={values.closing}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, closing: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Maximum call duration (seconds)">
+          <Input
+            type="number"
+            min={30}
+            max={3600}
+            value={values.maximumCallDurationSeconds}
+            onChange={(e) => {
+              setValues((v) => ({
+                ...v,
+                maximumCallDurationSeconds: Number(e.target.value),
+              }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Callback behavior">
+          <Textarea
+            value={values.callbackBehavior || ""}
+            onChange={(e) => {
+              setValues((v) => ({ ...v, callbackBehavior: e.target.value }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+        <Field label="Call end rules">
+          <StringListEditor
+            value={values.callEndRules}
+            onChange={(callEndRules) => {
+              setValues((v) => ({ ...v, callEndRules }));
+              setDirty(true);
+            }}
+          />
+        </Field>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function ToolsSection(props: SectionProps) {
+  const update = useUpdateAgentSection(props.agentId);
+  const { toast } = useToast();
+  const data = (props.initialData as z.infer<typeof agentToolsSchema>) || {
+    enabledTools: [],
+  };
+  const [values, setValues] = React.useState(data);
+  const [dirty, setDirty] = React.useState(false);
+  const available = [
+    "schedule_callback",
+    "create_lead",
+    "transfer_call",
+    "update_contact",
+    "book_appointment",
+  ];
+
+  React.useEffect(() => {
+    setValues(
+      (props.initialData as z.infer<typeof agentToolsSchema>) || {
+        enabledTools: [],
+      },
+    );
+    setDirty(false);
+  }, [props.initialData]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        const parsed = agentToolsSchema.safeParse(values);
+        if (!parsed.success) {
+          toast({ title: "Invalid tools config", variant: "destructive" });
+          return;
+        }
+        try {
+          await update.mutateAsync({ section: "tools", data: parsed.data });
+          setDirty(false);
+          toast({ title: "Tools saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <div className="space-y-2">
+        {available.map((tool) => {
+          const checked = values.enabledTools.includes(tool);
+          return (
+            <label
+              key={tool}
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => {
+                  setValues((v) => ({
+                    enabledTools: e.target.checked
+                      ? [...v.enabledTools, tool]
+                      : v.enabledTools.filter((t) => t !== tool),
+                  }));
+                  setDirty(true);
+                }}
+              />
+              {tool}
+            </label>
+          );
+        })}
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function ProductsSection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  type ProductItem = {
+    name: string;
+    description?: string | null;
+    features: string[];
+    benefits: string[];
+    currency: string;
+  };
+  const [products, setProducts] = React.useState<ProductItem[]>(
+    (initialData as ProductItem[]) || [],
+  );
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    setProducts((initialData as ProductItem[]) || []);
+    setDirty(false);
+  }, [initialData]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        try {
+          await update.mutateAsync({ section: "products", data: products });
+          setDirty(false);
+          toast({ title: "Products saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <div className="space-y-3">
+        {products.map((product, idx) => (
+          <div key={idx} className="space-y-2 rounded-lg border border-border p-3">
+            <Field label="Product name">
+              <Input
+                value={product.name}
+                onChange={(e) => {
+                  const next = [...products];
+                  next[idx] = { ...product, name: e.target.value };
+                  setProducts(next);
+                  setDirty(true);
+                }}
+              />
+            </Field>
+            <Field label="Description">
+              <Textarea
+                value={product.description || ""}
+                onChange={(e) => {
+                  const next = [...products];
+                  next[idx] = { ...product, description: e.target.value };
+                  setProducts(next);
+                  setDirty(true);
+                }}
+              />
+            </Field>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setProducts(products.filter((_, i) => i !== idx));
+                setDirty(true);
+              }}
+            >
+              Remove product
+            </Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setProducts([
+              ...products,
+              {
+                name: "",
+                description: "",
+                features: [],
+                benefits: [],
+                currency: "USD",
+              },
+            ]);
+            setDirty(true);
+          }}
+        >
+          Add product
+        </Button>
+      </div>
+    </SectionFormShell>
+  );
+}
+
+export function KnowledgeSection({ agentId, initialData }: SectionProps) {
+  const update = useUpdateAgentSection(agentId);
+  const { toast } = useToast();
+  type Knowledge = {
+    faqs: Array<{ question: string; answer: string }>;
+    policies: string[];
+    supportInformation: string[];
+    salesInformation: string[];
+    additionalKnowledge: string[];
+  };
+  const defaults = React.useMemo<Knowledge>(
+    () => ({
+      faqs: [],
+      policies: [],
+      supportInformation: [],
+      salesInformation: [],
+      additionalKnowledge: [],
+    }),
+    [],
+  );
+  const [values, setValues] = React.useState<Knowledge>(
+    (initialData as Knowledge) || defaults,
+  );
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    setValues((initialData as Knowledge) || defaults);
+    setDirty(false);
+  }, [initialData, defaults]);
+
+  return (
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        try {
+          await update.mutateAsync({ section: "knowledge", data: values });
+          setDirty(false);
+          toast({ title: "Knowledge saved", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <Field label="Policies">
+        <StringListEditor
+          value={values.policies}
+          onChange={(policies) => {
+            setValues((v) => ({ ...v, policies }));
+            setDirty(true);
+          }}
+        />
+      </Field>
+      <Field label="Sales information">
+        <StringListEditor
+          value={values.salesInformation}
+          onChange={(salesInformation) => {
+            setValues((v) => ({ ...v, salesInformation }));
+            setDirty(true);
+          }}
+        />
+      </Field>
+      <Field label="Support information">
+        <StringListEditor
+          value={values.supportInformation}
+          onChange={(supportInformation) => {
+            setValues((v) => ({ ...v, supportInformation }));
+            setDirty(true);
+          }}
+        />
+      </Field>
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">FAQs</p>
+        {values.faqs.map((faq, idx) => (
+          <div key={idx} className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-2">
+            <Input
+              placeholder="Question"
+              value={faq.question}
+              onChange={(e) => {
+                const faqs = [...values.faqs];
+                faqs[idx] = { ...faq, question: e.target.value };
+                setValues((v) => ({ ...v, faqs }));
+                setDirty(true);
+              }}
+            />
+            <Input
+              placeholder="Answer"
+              value={faq.answer}
+              onChange={(e) => {
+                const faqs = [...values.faqs];
+                faqs[idx] = { ...faq, answer: e.target.value };
+                setValues((v) => ({ ...v, faqs }));
+                setDirty(true);
+              }}
+            />
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setValues((v) => ({
+              ...v,
+              faqs: [...v.faqs, { question: "", answer: "" }],
+            }));
+            setDirty(true);
+          }}
+        >
+          Add FAQ
+        </Button>
+      </div>
+    </SectionFormShell>
+  );
+}
