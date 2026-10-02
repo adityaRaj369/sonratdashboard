@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { Suspense, lazy, useEffect } from "react";
 import { useWorkspacePath } from "@/components/workspace/WorkspaceNav";
@@ -6,6 +6,7 @@ import PermissionGate from "@/components/security/PermissionGate";
 
 const DashboardPage = lazy(() => import("@/views/dashboard/DashboardPage"));
 const AgentsPage = lazy(() => import("@/views/agents/AgentsPage"));
+const AgentCreatePage = lazy(() => import("@/views/agents/AgentCreatePage"));
 const AgentDetailPage = lazy(() => import("@/views/agents/AgentDetailPage"));
 const AgentSectionPage = lazy(() => import("@/views/agents/AgentSectionPage"));
 const CampaignsPage = lazy(() => import("@/views/campaigns/CampaignsPage"));
@@ -36,6 +37,7 @@ function usePrefetchModules() {
     const warm = () => {
       void import("@/views/dashboard/DashboardPage");
       void import("@/views/agents/AgentsPage");
+      void import("@/views/agents/AgentCreatePage");
       void import("@/views/campaigns/CampaignsPage");
       void import("@/views/support/SupportCallsPage");
       void import("@/views/whatsapp/WhatsAppPage");
@@ -72,6 +74,9 @@ function matchRoute(path: string): { perm?: string; node: React.ReactNode } {
   }
   if (path === "/agents") {
     return { perm: "agents.show_menu", node: <AgentsPage /> };
+  }
+  if (path === "/agents/new") {
+    return { perm: "agents.show_menu", node: <AgentCreatePage /> };
   }
   if (/^\/agents\/[^/]+\/[^/]+/.test(path)) {
     return { perm: "agents.show_menu", node: <AgentSectionPage /> };

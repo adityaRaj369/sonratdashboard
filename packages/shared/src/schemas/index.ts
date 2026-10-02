@@ -17,7 +17,7 @@ export const idSchema = z.string().uuid();
 
 export const agentGeneralSchema = z.object({
   name: z.string().min(1).max(120),
-  description: z.string().max(2000).optional().nullable(),
+  description: z.string().max(10000).optional().nullable(),
   role: z.string().min(1).max(120),
   industry: z.string().max(120).optional().nullable(),
   purpose: z.enum(["sales", "support", "whatsapp", "hybrid"]).default("sales"),
@@ -169,8 +169,11 @@ export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
 export const createAgentSchema = z.object({
   name: z.string().min(1).max(120),
-  description: z.string().max(2000).optional(),
+  description: z.string().max(10000).optional(),
   purpose: z.enum(["sales", "support", "whatsapp", "hybrid"]).default("sales"),
+  companyName: z.string().min(1).max(200).default("Your company"),
+  primaryObjective: z.string().min(1).max(1000).default("Understand whether the customer is a good fit and offer the next step."),
+  defaultLanguage: z.string().min(2).max(20).default("en"),
 });
 
 export const updateAgentSectionSchema = z.object({
@@ -216,10 +219,10 @@ export const createCampaignSchema = z.object({
   callingHoursStart: z.string().default("09:00"),
   callingHoursEnd: z.string().default("18:00"),
   timezone: z.string().default("UTC"),
-  maxAttempts: z.number().int().min(1).max(10).default(3),
+  maxAttempts: z.number().int().min(1).max(10).default(1),
   retryDelayMinutes: z.number().int().min(1).max(1440).default(60),
   concurrencyLimit: z.number().int().min(1).max(100).default(5),
-  callTimeoutSeconds: z.number().int().min(30).max(600).default(120),
+  callTimeoutSeconds: z.number().int().min(30).max(600).default(60),
   callbackBehavior: z.string().optional().nullable(),
   priority: z.number().int().min(1).max(10).default(5),
   startAt: z.string().datetime().optional().nullable(),

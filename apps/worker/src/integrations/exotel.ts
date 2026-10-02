@@ -93,11 +93,22 @@ export class ExotelClient implements TelephonyClient {
       params.StreamType = "bidirectional";
     }
 
+    // Some Exotel accounts use a Voicebot/stream applet configured on the
+    // number, while others accept the stream URL directly. Preserve the
+    // explicit stream configuration in either case and never silently drop it.
+    if (req.streamUrl && !params.StreamUrl && !flowUrl) {
+      params.StreamUrl = req.streamUrl.replace(/^http/i, "ws");
+      params.StreamType = "bidirectional";
+    }
+
     if (req.statusCallbackUrl) {
       params.StatusCallback = req.statusCallbackUrl;
     }
     if (req.timeoutSeconds) {
+      // TimeOut only controls unanswered ringing. TimeLimit is the hard cap
+      // for an answered call; without it a live AI call can bill indefinitely.
       params.TimeOut = String(Math.min(req.timeoutSeconds, 60));
+      params.TimeLimit = String(Math.min(req.timeoutSeconds, 600));
     }
     if (req.customParameters?.callId) {
       // Exotel CustomField is free-form; keep it a bare call UUID (no & pairs —

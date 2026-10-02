@@ -79,6 +79,6 @@ export function buildRuntimeInstructions(ctx: RuntimeSessionContext): string {
     `Direction: ${ctx.direction}`,
     `Conversation language: ${ctx.language.conversationLanguage}`,
     `Supported languages: ${ctx.supportedLanguages.join(", ")}`,
-    "Detect and follow the caller's spoken language when switching is allowed.",
+    `Start by speaking only ${ctx.defaultLanguage}. If the caller clearly speaks another supported language, answer in that language naturally without explaining the switch. Never invent a language that is not supported.`,
   ].join("\n");
 }

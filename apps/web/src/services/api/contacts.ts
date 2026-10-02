@@ -28,6 +28,10 @@ export const contactsApi = {
   get: (id: string) => http.get<Contact>(`${BASE}/${id}`),
   create: (body: ContactInput) =>
     http.post<Contact>(BASE, body, { idempotencyKey: crypto.randomUUID() }),
+  batchCreate: (items: Array<Partial<ContactInput>>) =>
+    http.post<{ items: Contact[]; count: number }>(`${BASE}/batch`, {
+      contacts: items,
+    }),
   update: (id: string, body: Partial<ContactInput>) =>
     http.patch<Contact>(`${BASE}/${id}`, body),
   remove: (id: string) => http.delete<void>(`${BASE}/${id}`),

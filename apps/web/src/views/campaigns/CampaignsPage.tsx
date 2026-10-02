@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { WorkspaceLink as Link } from "@/components/workspace/WorkspaceNav";
@@ -54,7 +54,7 @@ export default function CampaignsPage() {
       <WorkspaceToolbar>
         <Input
           className="max-w-sm"
-          placeholder="Search campaignsâ€¦"
+          placeholder="Search sales..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -82,9 +82,9 @@ export default function CampaignsPage() {
         ) : !campaigns.data?.items.length ? (
           <EmptyState
             icon={<Megaphone className="h-8 w-8" />}
-            title="Create your first campaign"
+            title="Create your first sale"
             description="Select an agent, contacts, and calling rules to start outbound calling."
-            actionLabel="New campaign"
+            actionLabel="New sale"
             onAction={() => setCreateOpen(true)}
           />
         ) : (
@@ -120,7 +120,7 @@ export default function CampaignsPage() {
                       {campaign.status}
                     </Badge>
                   </TD>
-                  <TD>{campaign.agent?.name || "â€”"}</TD>
+                  <TD>{campaign.agent?.name || "—"}</TD>
                   <TD className="text-muted-foreground">
                     {formatDate(campaign.updatedAt)}
                   </TD>

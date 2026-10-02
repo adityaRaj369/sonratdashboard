@@ -16,9 +16,9 @@ const knowledge = new AgentKnowledgeService();
 
 agents.use("*", authMiddleware, tenantMiddleware);
 
-agents.get("/", requirePerm("agents.read"), zValidator("query", paginationSchema), async (c) => {
+agents.get("/", requirePerm("agents.read"), zValidator("query", paginationSchema.extend({ search: z.string().optional() })), async (c) => {
   const q = c.req.valid("query");
-  const page = await service.list(getOrgId(c), { cursor: q.cursor, limit: q.limit });
+  const page = await service.list(getOrgId(c), { cursor: q.cursor, limit: q.limit, search: q.search });
   return c.json(page);
 });
 
@@ -78,7 +78,7 @@ agents.patch(
     "json",
     z.object({
       name: z.string().min(1).max(120).optional(),
-      description: z.string().max(2000).optional().nullable(),
+      description: z.string().max(10000).optional().nullable(),
     }),
   ),
   async (c) => {

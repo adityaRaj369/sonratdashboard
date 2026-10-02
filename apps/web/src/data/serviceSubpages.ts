@@ -11,6 +11,12 @@ export type ServiceSubpage = {
 export const SERVICE_SUBPAGES: Record<string, ServiceSubpage[]> = {
   agents: [
     { key: "list", label: "All agents", route: "/agents", permission: "agents.read" },
+    { key: "new", label: "Create agent", route: "/agents/new", permission: "agents.create" },
+    { key: "flows", label: "Flows", route: "/flows", permission: "agents.read" },
+  ],
+  flows: [
+    { key: "list", label: "All agents", route: "/agents", permission: "agents.read" },
+    { key: "new", label: "Create agent", route: "/agents/new", permission: "agents.create" },
     { key: "flows", label: "Flows", route: "/flows", permission: "agents.read" },
   ],
   "customer-support": [

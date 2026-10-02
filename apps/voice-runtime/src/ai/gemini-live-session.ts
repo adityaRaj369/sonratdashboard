@@ -27,7 +27,9 @@ export class GeminiLiveSession implements AiSession {
   private waiters: Array<() => void> = [];
   private liveSession: LiveSessionHandle | null = null;
   private audioBuffer = Buffer.alloc(0);
-  private readonly audioBatchBytes = 3200; // ~100ms @ 16kHz PCM16
+  // Exotel delivers roughly 40 ms frames. Forward each frame immediately;
+  // a 100 ms batch made the agent feel noticeably slow to respond.
+  private readonly audioBatchBytes = 1280; // ~40ms @ 16kHz PCM16
 
   constructor(
     private readonly params: CreateAiSessionParams,
@@ -64,8 +66,7 @@ export class GeminiLiveSession implements AiSession {
       config: {
         responseModalities: ["AUDIO"],
         systemInstruction:
-          this.params.systemInstruction ||
-          "You are a company phone agent on a live call. Never say you are Gemini, Google, or an AI model. Use only the company knowledge in your instructions. Keep answers under 2 short sentences.",
+          `${this.params.systemInstruction || "You are a company phone agent on a live call. Never say you are Gemini, Google, or an AI model. Use only the company knowledge in your instructions. Keep answers under 2 short sentences."}\n\nVOICE DELIVERY: Speak like a warm, natural human professional on a phone call. Use natural pauses, contractions, varied intonation, and short turns. Never sound like a narration, announcement, or text-to-speech demo.\nLANGUAGE CONTROL: Start in ${this.params.language}. The supported languages are ${this.params.supportedLanguages.join(", ") || this.params.language}. ${this.params.languageSwitching ? "If the caller clearly switches to one of the supported languages, switch with them naturally." : "Do not switch languages during the call."} ${this.params.languageDetection ? "Detect the caller's language from their speech, but do not announce language detection." : "Do not detect or announce language changes."}`,
         // Tools re-enabled when the agent config provides them.
         tools:
           this.params.tools.length > 0
@@ -77,8 +78,25 @@ export class GeminiLiveSession implements AiSession {
                     parameters: t.parameters,
                   })),
                 },
-              ]
+            ]
             : undefined,
+        // The Live API default end-of-speech window is conservative and feels
+        // slow on narrowband phone audio. Keep a short natural pause while
+        // allowing the agent to answer promptly.
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+            endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+            prefixPaddingMs: 80,
+            silenceDurationMs: 450,
+          },
+          activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+        },
+        // This is a live sales conversation, not a long-form reasoning task.
+        // Gemini 2.5 thinking is enabled by default and adds response delay.
+        thinkingConfig: this.model.includes("2.5")
+          ? { thinkingBudget: 0 }
+          : { thinkingLevel: "minimal" },
         speechConfig: this.params.voiceId
           ? {
               voiceConfig: {
@@ -87,7 +105,7 @@ export class GeminiLiveSession implements AiSession {
             }
           : {
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: "Puck" },
+                prebuiltVoiceConfig: { voiceName: "Kore" },
               },
             },
         inputAudioTranscription: {},
@@ -224,6 +242,16 @@ export class GeminiLiveSession implements AiSession {
         : text.startsWith("You are ")
           ? `${text} Speak now.`
           : text;
+    // Realtime text works for both 2.5 and 3.x Live models. In particular,
+    // 3.x reserves client content for initial history, so use the realtime
+    // channel for the opening turn as well.
+    if (this.liveSession.sendRealtimeInput) {
+      await this.liveSession.sendRealtimeInput({
+        text: prompt,
+        turnComplete: true,
+      });
+      return;
+    }
     await this.liveSession.sendClientContent?.({
       turns: [{ role: "user", parts: [{ text: prompt }] }],
       turnComplete: true,

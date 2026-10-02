@@ -67,6 +67,9 @@ export interface CreateAiSessionParams {
     parameters: Record<string, unknown>;
   }>;
   language: string;
+  supportedLanguages: string[];
+  languageDetection: boolean;
+  languageSwitching: boolean;
   voiceId?: string;
 }
 

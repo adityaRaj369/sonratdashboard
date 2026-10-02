@@ -1,4 +1,25 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+
+function tryLoadEnv(): void {
+  if (typeof process.loadEnvFile !== "function") return;
+  try {
+    let dir = process.cwd();
+    for (let i = 0; i < 5; i++) {
+      const p = join(dir, ".env");
+      if (existsSync(p)) {
+        process.loadEnvFile(p);
+        break;
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    // Ignore error if already loaded or unavailable
+  }
+}
 
 const booleanish = z
   .union([z.boolean(), z.string()])
@@ -39,6 +60,8 @@ const envSchema = z.object({
   EXOTEL_SUBDOMAIN: z.string().default("api.exotel.com"),
   EXOTEL_PHONE_NUMBER: z.string().optional(),
   EXOTEL_WEBHOOK_BASE_URL: z.string().url().optional(),
+  /** Optional Exotel webhook signing secret — used to verify X-Exotel-Signature header. */
+  EXOTEL_WEBHOOK_SECRET: z.string().optional(),
   /** App Bazaar flow URL, e.g. http://my.exotel.com/{sid}/exoml/start_voice/{appId} */
   EXOTEL_FLOW_URL: z.string().url().optional(),
 
@@ -63,6 +86,10 @@ let cached: AppConfig | null = null;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && process.env.NODE_ENV !== "test") return cached;
+
+  if (env === process.env && !process.env.DATABASE_URL) {
+    tryLoadEnv();
+  }
 
   const parsed = envSchema.safeParse(env);
   if (!parsed.success) {

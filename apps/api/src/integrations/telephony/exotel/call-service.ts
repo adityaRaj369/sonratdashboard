@@ -26,13 +26,21 @@ export class ExotelCallService implements TelephonyProvider {
       StatusCallbackContentType: "application/json",
     };
 
-    if (input.customField) {
-      body.CustomField = input.customField;
+    const customField = input.customField ?? input.customParameters?.callId;
+    if (customField) {
+      body.CustomField = customField;
+    }
+    if (input.flowUrl) {
+      body.Url = input.flowUrl;
+    } else if (input.streamUrl) {
+      body.StreamUrl = input.streamUrl.replace(/^http/i, "ws");
+      body.StreamType = "bidirectional";
     }
     if (input.record) {
       body.Record = "true";
     }
     if (input.timeoutSeconds) {
+      // Keep the ringing timeout and the answered-call billing cap separate.
       body.TimeLimit = String(input.timeoutSeconds);
     }
 

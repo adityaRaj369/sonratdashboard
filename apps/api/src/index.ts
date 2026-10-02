@@ -32,6 +32,43 @@ async function main() {
     },
   );
 
+  // Transparently proxy /ws/* WebSocket upgrade connections to the voice-runtime
+  // (port 4100), allowing a single public tunnel/domain for both webhooks & audio streams.
+  import("node:net").then(({ default: net }) => {
+    (server as unknown as import("node:http").Server).on(
+      "upgrade",
+      (req, clientSocket, head) => {
+        if (req.url?.startsWith("/ws/")) {
+          const upstream = net.connect(
+            config.VOICE_RUNTIME_PORT,
+            "127.0.0.1",
+            () => {
+              upstream.write(
+                `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+                  Object.entries(req.headers)
+                    .map(
+                      ([k, v]) =>
+                        `${k}: ${Array.isArray(v) ? v.join(", ") : v}\r\n`,
+                    )
+                    .join("") +
+                  "\r\n",
+              );
+              if (head && head.length > 0) upstream.write(head);
+              clientSocket.pipe(upstream).pipe(clientSocket);
+            },
+          );
+          upstream.on("error", (err) => {
+            logger.warn("ws_proxy_upstream_error", { err: err.message });
+            clientSocket.destroy();
+          });
+          clientSocket.on("error", () => {
+            upstream.destroy();
+          });
+        }
+      },
+    );
+  });
+
   const shutdown = async (signal: string) => {
     logger.info("api_shutdown", { signal });
     server.close();

@@ -47,6 +47,10 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
   ]);
 
   if (campaign.status !== "RUNNING") {
+    await db.campaignContact.updateMany({
+      where: { id: campaignContactId, status: "INITIATING" },
+      data: { status: "QUEUED" },
+    });
     throw new PermanentJobError(`Campaign not running: ${campaign.status}`);
   }
 
@@ -61,6 +65,10 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
   }
 
   if (contact.callability !== "callable") {
+    await db.campaignContact.updateMany({
+      where: { id: campaignContactId, status: "INITIATING" },
+      data: { status: "CANCELLED" },
+    });
     throw new PermanentJobError(
       `Contact not callable (${contact.callability}): ${contactId}`,
     );
@@ -78,10 +86,16 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
     throw new PermanentJobError("Campaign agent has no published version");
   }
 
-  const fromNumber = campaign.phoneNumber?.e164;
+  const fromNumber =
+    campaign.phoneNumber?.e164 ??
+    process.env.EXOTEL_PHONE_NUMBER;
   const toNumber = contact.normalizedPhone ?? contact.rawPhone;
   if (!fromNumber || !toNumber) {
-    throw new PermanentJobError("Missing from/to phone numbers");
+    await db.campaignContact.updateMany({
+      where: { id: campaignContactId, status: "INITIATING" },
+      data: { status: "FAILED" },
+    });
+    throw new PermanentJobError("Missing from/to phone numbers — configure a phone number on the campaign or set EXOTEL_PHONE_NUMBER env var");
   }
 
   return ctx.admission.withAdmission(
@@ -127,7 +141,7 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
           const webhookBase =
             process.env.EXOTEL_WEBHOOK_BASE_URL || ctx.apiBaseUrl;
           const voiceBase = ctx.voiceRuntimeUrl.replace(/\/$/, "");
-          const streamUrl = `${voiceBase.replace(/^http/i, "ws")}/ws/exotel`;
+          const streamUrl = `${voiceBase.replace(/^http/i, "ws")}/ws/exotel?callId=${encodeURIComponent(call.id)}`;
 
           let placed;
           try {
@@ -153,11 +167,19 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
               where: { id: call.id },
               data: { status: "FAILED", failureReason: reason, endedAt: new Date() },
             });
+            const nextAttempt = campaignContact.attemptCount + 1;
+            const canRetry = nextAttempt < campaign.maxAttempts;
             await db.campaignContact.update({
               where: { id: campaignContactId },
               data: {
-                status: "FAILED",
+                status: canRetry ? "RETRY_SCHEDULED" : "FAILED",
                 attemptCount: { increment: 1 },
+                nextAttemptAt: canRetry
+                  ? new Date(
+                      Date.now() +
+                        Math.max(1, campaign.retryDelayMinutes) * 60 * 1000,
+                    )
+                  : null,
                 lastCallId: call.id,
               },
             });

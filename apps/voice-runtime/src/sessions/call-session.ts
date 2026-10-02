@@ -136,6 +136,9 @@ export class CallSession {
       systemInstruction: buildRuntimeInstructions(this.context),
       tools: this.context.tools,
       language: this.context.language.conversationLanguage,
+      supportedLanguages: this.context.supportedLanguages,
+      languageDetection: true,
+      languageSwitching: true,
       voiceId: this.context.metadata.voiceId as string | undefined,
     });
 

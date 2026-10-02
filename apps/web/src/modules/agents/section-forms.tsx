@@ -20,6 +20,16 @@ import { Button, Field, Input, Select, Textarea, useToast } from "@/components/u
 import { useUpdateAgentSection } from "@/hooks/use-agents";
 import { useAgentFlows } from "@/hooks/use-agent-flows";
 import { agentsApi, type AgentSection } from "@/services/api/agents";
+import {
+  ArrowRight,
+  HelpCircle,
+  Plus,
+  ShieldAlert,
+  Sparkles,
+  Tag,
+  Target,
+  Trash2,
+} from "lucide-react";
 
 function StringListEditor({
   value,
@@ -50,33 +60,39 @@ function StringListEditor({
         <Button
           type="button"
           variant="outline"
+          size="sm"
+          className="shrink-0"
           onClick={() => {
             if (!draft.trim()) return;
             onChange([...value, draft.trim()]);
             setDraft("");
           }}
         >
+          <Plus className="mr-1 h-3.5 w-3.5" />
           Add
         </Button>
       </div>
-      <ul className="space-y-1">
-        {value.map((item, idx) => (
-          <li
-            key={`${item}-${idx}`}
-            className="flex items-center justify-between rounded-md border border-border px-2 py-1.5 text-sm"
-          >
-            <span>{item}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+      {value.length > 0 && (
+        <ul className="space-y-1.5 pt-1">
+          {value.map((item, idx) => (
+            <li
+              key={`${item}-${idx}`}
+              className="flex items-center justify-between rounded-lg border border-border bg-card/60 px-3 py-2 text-xs shadow-xs transition-colors hover:border-primary/30"
             >
-              Remove
-            </Button>
-          </li>
-        ))}
-      </ul>
+              <span className="flex-1 font-medium text-foreground">{item}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                onClick={() => onChange(value.filter((_, i) => i !== idx))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -329,7 +345,7 @@ export function VoiceSection({ agentId, initialData }: SectionProps) {
     resolver: zodResolver(agentVoiceSchema),
     defaultValues: (initialData as z.infer<typeof agentVoiceSchema>) || {
       voiceProvider: "gemini",
-      voiceId: "Puck",
+      voiceId: "Kore",
       voiceGender: "neutral",
       language: "en",
     },
@@ -360,9 +376,9 @@ export function VoiceSection({ agentId, initialData }: SectionProps) {
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Voice ID">
           <Select {...form.register("voiceId")}>
-            <option value="Puck">Puck</option>
+            <option value="Puck">Puck (upbeat)</option>
             <option value="Charon">Charon</option>
-            <option value="Kore">Kore</option>
+            <option value="Kore">Kore (natural)</option>
             <option value="Fenrir">Fenrir</option>
             <option value="Aoede">Aoede</option>
           </Select>
@@ -614,22 +630,414 @@ function ArraySection({
 }
 
 export function SalesSection(props: SectionProps) {
+  const update = useUpdateAgentSection(props.agentId);
+  const { toast } = useToast();
+  type SalesConfig = z.infer<typeof agentSalesSchema>;
+  const defaults: SalesConfig = {
+    primaryObjective: "",
+    secondaryObjectives: [],
+    qualificationQuestions: [],
+    discoveryQuestions: [],
+    offers: [],
+    objectionHandling: [],
+    closingBehavior: "",
+    leadQualificationRules: [],
+  };
+
+  const [values, setValues] = React.useState<SalesConfig>(() => ({
+    ...defaults,
+    ...((props.initialData as SalesConfig) || {}),
+  }));
+  const [dirty, setDirty] = React.useState(false);
+
+  // Dedicated objection handler draft state
+  const [objectionTrigger, setObjectionTrigger] = React.useState("");
+  const [objectionResponse, setObjectionResponse] = React.useState("");
+
+  React.useEffect(() => {
+    setValues({
+      ...defaults,
+      ...((props.initialData as SalesConfig) || {}),
+    });
+    setDirty(false);
+  }, [props.initialData]);
+
+  const addObjection = (trigger: string, response: string) => {
+    if (!trigger.trim() || !response.trim()) return;
+    const formatted = `When prospect says: "${trigger.trim()}" -> Pitch: ${response.trim()}`;
+    setValues((prev) => ({
+      ...prev,
+      objectionHandling: [...prev.objectionHandling, formatted],
+    }));
+    setDirty(true);
+    setObjectionTrigger("");
+    setObjectionResponse("");
+  };
+
+  const OBJECTION_PRESETS = [
+    {
+      title: "Too expensive",
+      trigger: "It's too expensive / We don't have the budget right now.",
+      response: "Acknowledge budget constraints, emphasize average 3x ROI achieved within 90 days, and offer the flexible monthly tier or starter pilot.",
+    },
+    {
+      title: "Send an email",
+      trigger: "Can you just send me an email with the details?",
+      response: "Agree to email immediately, then ask one quick qualifying question so the sent info is specifically customized to their current setup.",
+    },
+    {
+      title: "Using competitor",
+      trigger: "We are already using another vendor / solution.",
+      response: "Respect their current choice, ask what they like most about it, and highlight our distinct advantage in AI automation and instant setup.",
+    },
+    {
+      title: "Bad timing",
+      trigger: "I'm busy / Now is not a good time.",
+      response: "Apologize politely for catching them at a busy time, and propose a specific 5-minute callback time tomorrow morning or afternoon.",
+    },
+  ];
+
   return (
-    <ArraySection
-      {...props}
-      section="sales"
-      schema={agentSalesSchema}
-      fields={[
-        { key: "primaryObjective", label: "Primary objective" },
-        { key: "closingBehavior", label: "Closing behavior", type: "textarea" },
-        { key: "secondaryObjectives", label: "Secondary objectives", type: "list" },
-        { key: "qualificationQuestions", label: "Qualification questions", type: "list" },
-        { key: "discoveryQuestions", label: "Discovery questions", type: "list" },
-        { key: "offers", label: "Offers", type: "list" },
-        { key: "objectionHandling", label: "Objection handling", type: "list" },
-        { key: "leadQualificationRules", label: "Lead qualification rules", type: "list" },
-      ]}
-    />
+    <SectionFormShell
+      dirty={dirty}
+      saving={update.isPending}
+      onSave={async () => {
+        const parsed = agentSalesSchema.safeParse(values);
+        if (!parsed.success) {
+          toast({
+            title: "Validation failed",
+            description: parsed.error.issues[0]?.message || "Check required fields",
+            variant: "destructive",
+          });
+          return;
+        }
+        try {
+          await update.mutateAsync({ section: "sales", data: parsed.data });
+          setDirty(false);
+          toast({ title: "Sales playbook saved successfully", variant: "success" });
+        } catch (err) {
+          toast({
+            title: "Save failed",
+            description: err instanceof Error ? err.message : undefined,
+            variant: "destructive",
+          });
+        }
+      }}
+    >
+      <div className="space-y-6">
+        {/* Playbook Overview Header */}
+        <div className="rounded-xl border border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-semibold text-foreground">
+                  Sales & Outbound Playbook
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xl">
+                Configure your AI agent&apos;s pitch strategy, qualification criteria, offer catalog, and objection-handling playbook for outbound sales calls.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+                {values.qualificationQuestions.length} Qualification Qs
+              </span>
+              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+                {values.offers.length} Offers
+              </span>
+              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+                {values.objectionHandling.length} Objection Handlers
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 1: Core Strategy & Closing */}
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Core Strategy & Closing
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Define the primary conversion goal and the exact closing behavior.
+            </p>
+          </div>
+
+          <Field label="Primary objective *">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              The #1 outcome of the call (e.g. Schedule a demo, close a trial, qualify interest)
+            </p>
+            <Input
+              placeholder="e.g. Qualify interest in our AI receptionist and book a 15-minute product walkthrough"
+              value={values.primaryObjective}
+              onChange={(e) => {
+                setValues((v) => ({ ...v, primaryObjective: e.target.value }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+
+          <Field label="Secondary objectives">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Additional milestones if primary objective is met or blocked
+            </p>
+            <StringListEditor
+              value={values.secondaryObjectives}
+              placeholder="e.g. Get direct email of head of operations"
+              onChange={(next) => {
+                setValues((v) => ({ ...v, secondaryObjectives: next }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+
+          <Field label="Closing behavior">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              How the agent should secure commitment and wrap up the call
+            </p>
+            <Textarea
+              placeholder="e.g. Confirm the prospect's email and phone number, propose two concrete time slots for the demo, warmly thank them, and inform them they will receive a calendar invite."
+              rows={3}
+              value={values.closingBehavior || ""}
+              onChange={(e) => {
+                setValues((v) => ({ ...v, closingBehavior: e.target.value }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+        </div>
+
+        {/* Card 2: Discovery & Qualification Scripting */}
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              Discovery & Qualification Scripting
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Questions the AI will ask to qualify prospects and uncover pain points.
+            </p>
+          </div>
+
+          <Field label="Qualification questions">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Questions to verify if the prospect fits your ideal customer profile
+            </p>
+            <StringListEditor
+              value={values.qualificationQuestions}
+              placeholder="e.g. How many inbound calls does your team currently handle each week?"
+              onChange={(next) => {
+                setValues((v) => ({ ...v, qualificationQuestions: next }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+
+          <Field label="Discovery questions">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Probing questions to uncover bottlenecks and urgency
+            </p>
+            <StringListEditor
+              value={values.discoveryQuestions}
+              placeholder="e.g. What happens when a customer calls after business hours?"
+              onChange={(next) => {
+                setValues((v) => ({ ...v, discoveryQuestions: next }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+
+          <Field label="Lead qualification rules">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Rules that mark a contact as an active qualified lead
+            </p>
+            <StringListEditor
+              value={values.leadQualificationRules}
+              placeholder="e.g. Qualify if company receives >20 calls/day and agrees to a demo"
+              onChange={(next) => {
+                setValues((v) => ({ ...v, leadQualificationRules: next }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+        </div>
+
+        {/* Card 3: Offers & Promotions */}
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Tag className="h-4 w-4 text-primary" />
+              Offers, Pricing & Value Propositions
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Packages, discounts, and hooks the agent can pitch to incentivize action.
+            </p>
+          </div>
+
+          <Field label="Active offers & incentives">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Promotions the AI can offer to hesitant prospects
+            </p>
+            <StringListEditor
+              value={values.offers}
+              placeholder="e.g. 14-day risk-free pilot with 500 free calling minutes included"
+              onChange={(next) => {
+                setValues((v) => ({ ...v, offers: next }));
+                setDirty(true);
+              }}
+            />
+          </Field>
+        </div>
+
+        {/* Card 4: Objection Handling Matrix */}
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-primary" />
+                  Objection Handling Matrix
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Train the agent how to counter pushback with winning responses.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick preset chips */}
+          <div>
+            <span className="text-[11px] font-medium text-muted-foreground block mb-1.5">
+              Quick-add common objection handlers:
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {OBJECTION_PRESETS.map((preset) => (
+                <button
+                  key={preset.title}
+                  type="button"
+                  onClick={() => addObjection(preset.trigger, preset.response)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-secondary hover:border-primary/40 cursor-pointer"
+                >
+                  <Plus className="h-3 w-3 text-primary" />
+                  {preset.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Objection Input Builder */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3 sm:p-4 space-y-3">
+            <span className="text-xs font-semibold text-foreground">
+              Add custom objection handler
+            </span>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                  When prospect says:
+                </label>
+                <Input
+                  className="text-xs"
+                  placeholder="e.g. We don't have the budget right now"
+                  value={objectionTrigger}
+                  onChange={(e) => setObjectionTrigger(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                  Agent pitch / counter-argument:
+                </label>
+                <Input
+                  className="text-xs"
+                  placeholder="e.g. Explain our flexible starter plan and 3x cost savings"
+                  value={objectionResponse}
+                  onChange={(e) => setObjectionResponse(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addObjection(objectionTrigger, objectionResponse);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                disabled={!objectionTrigger.trim() || !objectionResponse.trim()}
+                onClick={() => addObjection(objectionTrigger, objectionResponse)}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add objection rule
+              </Button>
+            </div>
+          </div>
+
+          {/* List of active objection handlers */}
+          <div className="space-y-2">
+            {values.objectionHandling.map((item, idx) => {
+              const arrowIdx = item.indexOf("->");
+              const isFormatted = arrowIdx !== -1;
+              const trigger = isFormatted
+                ? item.substring(0, arrowIdx).replace(/^When (prospect|customer) says:\s*"?/, "").replace(/"?\s*$/, "")
+                : "Objection";
+              const pitch = isFormatted
+                ? item.substring(arrowIdx + 2).replace(/^(Pitch|Counter|Response):\s*/, "").trim()
+                : item;
+
+              return (
+                <div
+                  key={`${item}-${idx}`}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:border-primary/30"
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+                        Prospect Objection
+                      </span>
+                      <span className="text-xs font-medium text-foreground">
+                        &ldquo;{trigger}&rdquo;
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-1.5 pt-0.5">
+                      <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {pitch}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() =>
+                      setValues((prev) => ({
+                        ...prev,
+                        objectionHandling: prev.objectionHandling.filter(
+                          (_, i) => i !== idx,
+                        ),
+                      }))
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
+            {!values.objectionHandling.length && (
+              <p className="text-xs text-muted-foreground italic text-center py-3">
+                No objection handling rules configured yet. Click a preset above or add a custom rule.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </SectionFormShell>
   );
 }
 

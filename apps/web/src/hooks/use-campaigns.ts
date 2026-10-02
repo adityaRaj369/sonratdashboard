@@ -26,6 +26,12 @@ export function useCampaigns(params?: {
   return useQuery({
     queryKey: campaignKeys.list(params),
     queryFn: () => campaignsApi.list(params),
+    refetchInterval: (query) => {
+      const anyRunning = query.state.data?.items?.some(
+        (c: { status?: string }) => c.status === "RUNNING",
+      );
+      return anyRunning ? 3000 : false;
+    },
   });
 }
 
@@ -34,6 +40,17 @@ export function useCampaign(id: string) {
     queryKey: campaignKeys.detail(id),
     queryFn: () => campaignsApi.get(id),
     enabled: Boolean(id),
+    refetchInterval: (query) =>
+      query.state.data?.status === "RUNNING" ? 2500 : false,
+  });
+}
+
+export function useCampaignPreflight(id: string) {
+  return useQuery({
+    queryKey: ["campaigns", id, "preflight"],
+    queryFn: () => campaignsApi.preflight(id),
+    enabled: Boolean(id),
+    refetchInterval: 5000,
   });
 }
 
@@ -45,6 +62,7 @@ export function useCampaignContacts(
     queryKey: campaignKeys.contacts(id, params),
     queryFn: () => campaignsApi.contacts(id, params),
     enabled: Boolean(id),
+    refetchInterval: 3000,
   });
 }
 
@@ -56,6 +74,7 @@ export function useCampaignCalls(
     queryKey: campaignKeys.calls(id, params),
     queryFn: () => campaignsApi.calls(id, params),
     enabled: Boolean(id),
+    refetchInterval: 3000,
   });
 }
 

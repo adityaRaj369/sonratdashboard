@@ -17,6 +17,7 @@ import {
 import {
   useCampaign,
   useCampaignActions,
+  useCampaignPreflight,
 } from "./hooks";
 import { useCampaignAnalytics } from "@/hooks/use-analytics";
 import { formatDate } from "@/lib/utils";
@@ -26,6 +27,7 @@ export default function CampaignDetailPage() {
   const id = params.id;
   const campaign = useCampaign(id);
   const actions = useCampaignActions(id);
+  const preflight = useCampaignPreflight(id);
   const analytics = useCampaignAnalytics(id);
   const { toast } = useToast();
 
@@ -78,23 +80,46 @@ export default function CampaignDetailPage() {
         title={data.name}
         description={data.description || data.objective}
         breadcrumbs={[
-          { label: "Campaigns", href: "/campaigns" },
+          { label: "Sales", href: "/sales" },
           { label: data.name },
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{data.status}</Badge>
+            <Badge
+              variant={
+                data.status === "RUNNING"
+                  ? "success"
+                  : data.status === "FAILED"
+                    ? "destructive"
+                    : "outline"
+              }
+            >
+              {data.status}
+            </Badge>
             <Button
               loading={actions.start.isPending}
-              onClick={() => run("start", "Campaign started")}
-              disabled={data.status === "RUNNING"}
+              onClick={() =>
+                run(
+                  "start",
+                  data.status === "PAUSED"
+                    ? "Sale resumed"
+                    : data.status === "COMPLETED"
+                      ? "Sale restarted"
+                      : "Sale started",
+                )
+              }
+              disabled={data.status === "RUNNING" || data.status === "CANCELLED" || preflight.data?.ready === false}
             >
-              Start
+              {data.status === "PAUSED"
+                ? "Resume"
+                : data.status === "COMPLETED"
+                  ? "Restart"
+                  : "Start"}
             </Button>
             <Button
               variant="outline"
               loading={actions.pause.isPending}
-              onClick={() => run("pause", "Campaign paused")}
+              onClick={() => run("pause", "Sale paused")}
               disabled={data.status !== "RUNNING"}
             >
               Pause
@@ -102,7 +127,7 @@ export default function CampaignDetailPage() {
             <Button
               variant="destructive"
               loading={actions.cancel.isPending}
-              onClick={() => run("cancel", "Campaign cancelled")}
+              onClick={() => run("cancel", "Sale cancelled")}
               disabled={["COMPLETED", "CANCELLED"].includes(data.status)}
             >
               Cancel
@@ -134,6 +159,20 @@ export default function CampaignDetailPage() {
         </Link>
       </WorkspaceToolbar>
       <WorkspaceContent className="space-y-4">
+        {data.status !== "RUNNING" && preflight.data && !preflight.data.ready ? (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50/60 p-4 text-sm dark:bg-amber-950/20">
+            <p className="font-semibold">Campaign needs attention before it can start</p>
+            <div className="mt-2 grid gap-1 text-muted-foreground sm:grid-cols-2">
+              {preflight.data.checks.map((check) => (
+                <p key={check.id}>
+                  <span className={check.ready ? "text-emerald-600" : "text-amber-700"}>
+                    {check.ready ? "Ready" : "Required"}
+                  </span>{" "}{check.label}: {check.message}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Agent", data.agent?.name || "—"],

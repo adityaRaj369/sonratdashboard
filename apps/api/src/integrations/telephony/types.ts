@@ -2,6 +2,9 @@ export interface PlaceCallInput {
   from: string;
   to: string;
   statusCallbackUrl: string;
+  streamUrl?: string;
+  flowUrl?: string;
+  customParameters?: Record<string, string>;
   customField?: string;
   timeoutSeconds?: number;
   record?: boolean;

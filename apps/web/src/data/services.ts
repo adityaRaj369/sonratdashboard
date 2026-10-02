@@ -45,7 +45,7 @@ const services: ServiceDefinition[] = [
     description: "Conversation graphs for agents",
     permission: "agents.show_menu",
     group: "Workspace",
-    subpages: [{ key: "list", label: "All flows", route: "/flows", permission: "agents.read" }],
+    subpages: SERVICE_SUBPAGES.flows,
   },
   {
     key: "customer-support",

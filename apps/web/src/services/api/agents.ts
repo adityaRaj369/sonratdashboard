@@ -30,8 +30,20 @@ export const agentsApi = {
     name: string;
     description?: string;
     purpose?: "sales" | "support" | "whatsapp" | "hybrid";
-  }) =>
-    http.post<Agent>(BASE, body, { idempotencyKey: crypto.randomUUID() }),
+    companyName?: string;
+    primaryObjective?: string;
+    defaultLanguage?: string;
+  }) => {
+    return http.post<Agent>(
+      BASE,
+      {
+        name: body.name.trim(),
+        ...(body.description?.trim() ? { description: body.description.trim() } : {}),
+        purpose: body.purpose ?? "sales",
+      },
+      { idempotencyKey: crypto.randomUUID() },
+    );
+  },
   update: (id: string, body: { name?: string; description?: string }) =>
     http.patch<Agent>(`${BASE}/${id}`, body),
   updateSection: (id: string, section: AgentSection, data: unknown) =>

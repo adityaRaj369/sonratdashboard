@@ -157,4 +157,63 @@ export class ContactService {
       resourceId: contactId,
     });
   }
+
+  async batchCreate(
+    organizationId: string,
+    userId: string,
+    items: Array<any>,
+  ) {
+    const results = [];
+    for (const item of items) {
+      if (!item.name || !item.phone) continue;
+      const phone = normalizePhone(String(item.phone));
+      if (!phone.valid || !phone.e164) continue;
+
+      const contact = await db.contact.upsert({
+        where: {
+          organizationId_normalizedPhone: {
+            organizationId,
+            normalizedPhone: phone.e164,
+          },
+        },
+        create: {
+          organizationId,
+          name: String(item.name).trim(),
+          rawPhone: String(item.phone).trim(),
+          normalizedPhone: phone.e164,
+          countryCode: phone.countryCode,
+          email: item.email ? String(item.email).trim() : null,
+          company: item.company ? String(item.company).trim() : null,
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          customFields:
+            item.customFields && typeof item.customFields === "object"
+              ? item.customFields
+              : {},
+          leadStatus: item.leadStatus ? String(item.leadStatus) : null,
+          notes: item.notes ? String(item.notes) : null,
+          source: item.source ? String(item.source) : "csv_upload",
+          timezone: item.timezone ? String(item.timezone) : null,
+        },
+        update: {
+          name: String(item.name).trim(),
+          email: item.email ? String(item.email).trim() : undefined,
+          company: item.company ? String(item.company).trim() : undefined,
+          deletedAt: null,
+        },
+      });
+      results.push(contact);
+    }
+
+    if (results.length > 0) {
+      await this.audit.log({
+        organizationId,
+        actorUserId: userId,
+        action: "contact.batch_create",
+        resource: "contact",
+        metadata: { count: results.length },
+      });
+    }
+
+    return results;
+  }
 }

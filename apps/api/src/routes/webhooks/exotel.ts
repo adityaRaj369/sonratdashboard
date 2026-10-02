@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { db } from "@sonrat/database";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getConfig } from "@sonrat/config";
 import type { CallStatus } from "@sonrat/shared";
 import {
   createExotelWebhookService,
@@ -11,6 +13,28 @@ import { CallStateService } from "../../services/call-state.service.js";
 const exotel = new Hono();
 const webhookService = createExotelWebhookService();
 const callState = new CallStateService();
+
+/**
+ * Verify Exotel webhook signature (HMAC-SHA256 over raw body).
+ * Exotel sends: X-Exotel-Signature: <base64-hmac>
+ * Only enforced when EXOTEL_WEBHOOK_SECRET is set in config.
+ */
+function verifyExotelSignature(
+  rawBody: string,
+  signature: string | undefined,
+): boolean {
+  const secret = getConfig().EXOTEL_WEBHOOK_SECRET;
+  if (!secret) return true; // Not configured → skip verification (dev mode)
+  if (!signature) return false;
+  const expected = createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("base64");
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 async function parsePayload(c: { req: { parseBody: () => Promise<Record<string, unknown>>; json: () => Promise<unknown>; header: (n: string) => string | undefined } }) {
   const contentType = c.req.header("content-type") ?? "";
@@ -65,7 +89,23 @@ async function processIdempotent(
 }
 
 exotel.post("/call-status", async (c) => {
-  const raw = await parsePayload(c);
+  const rawBody = await c.req.text();
+  const sig = c.req.header("x-exotel-signature");
+  if (!verifyExotelSignature(rawBody, sig)) {
+    logger.warn("exotel_webhook_bad_signature", { path: "/call-status" });
+    return c.json({ error: "Invalid signature" }, 403);
+  }
+
+  // Parse body manually after reading as text
+  let raw: Record<string, unknown>;
+  const contentType = c.req.header("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    raw = JSON.parse(rawBody) as Record<string, unknown>;
+  } else {
+    const params = new URLSearchParams(rawBody);
+    raw = Object.fromEntries(params.entries());
+  }
+
   const callIdQuery = c.req.query("callId");
   const parsed = webhookService.parse({ ...raw, ...(callIdQuery ? { CustomField: callIdQuery } : {}) });
 
