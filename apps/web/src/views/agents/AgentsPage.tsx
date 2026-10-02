@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
-import { WorkspaceLink as Link } from "@/components/workspace/WorkspaceNav";
+import { WorkspaceLink as Link, useWorkspaceNavigate } from "@/components/workspace/WorkspaceNav";
 import { Plus, Bot } from "lucide-react";
 import {
   Workspace,
@@ -23,14 +23,12 @@ import {
   THead,
   TR,
 } from "@/components/ui";
-import WorkspacePanel from "@/components/common/workspacepanel/WorkspacePanel";
-import AgentCreateInlineEditor from "@/views/agents/components/AgentCreateInlineEditor";
 import { useAgents } from "./hooks";
 import { formatDate } from "@/lib/utils";
 
 export default function AgentsPage() {
   const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  const navigate = useWorkspaceNavigate();
   const agents = useAgents({ search: search || undefined, limit: 50 });
 
   return (
@@ -39,7 +37,7 @@ export default function AgentsPage() {
         title="Agents"
         description="Train AI agents with company knowledge for sales, support, and WhatsApp"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => navigate.push("/agents/new")}>
             <Plus className="h-4 w-4" />
             New agent
           </Button>
@@ -48,7 +46,7 @@ export default function AgentsPage() {
       <WorkspaceToolbar>
         <Input
           className="max-w-sm"
-          placeholder="Search agentsâ€¦"
+          placeholder="Search agents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -67,7 +65,7 @@ export default function AgentsPage() {
             title="Create your first AI agent"
             description="Configure personality, voice, languages, and sales behavior."
             actionLabel="New agent"
-            onAction={() => setCreateOpen(true)}
+            onAction={() => navigate.push("/agents/new")}
           />
         ) : (
           <Table>
@@ -120,17 +118,6 @@ export default function AgentsPage() {
           </Table>
         )}
       </WorkspaceContent>
-
-      <WorkspacePanel
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Create Agent"
-        subtitle="Agents"
-        description="Start with a draft. Publish when configuration is complete."
-        widthClass="w-[80vw] max-w-[960px] min-w-[360px]"
-      >
-        <AgentCreateInlineEditor onClose={() => setCreateOpen(false)} />
-      </WorkspacePanel>
     </Workspace>
   );
 }

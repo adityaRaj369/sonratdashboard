@@ -44,7 +44,7 @@ export const scheduleCampaign: JobHandler<ScheduleCampaignData> = async (
   const contacts = await db.campaignContact.findMany({
     where: {
       campaignId,
-      status: "QUEUED",
+      status: { in: ["QUEUED", "RETRY_SCHEDULED"] },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
     take: batchSize,
@@ -53,21 +53,38 @@ export const scheduleCampaign: JobHandler<ScheduleCampaignData> = async (
 
   let enqueued = 0;
   for (const cc of contacts) {
-    await ctx.enqueue(
-      "create_outbound_call",
-      {
-        organizationId,
-        campaignId,
-        campaignContactId: cc.id,
-        contactId: cc.contactId,
-        idempotencyKey: `outbound:${campaignId}:${cc.contactId}:${cc.attemptCount}`,
+    // Claim the contact before enqueueing. Without this atomic claim, the
+    // scheduler can enqueue the same contact more than once while another
+    // scheduler tick is still in flight.
+    const claimed = await db.campaignContact.updateMany({
+      where: {
+        id: cc.id,
+        status: { in: ["QUEUED", "RETRY_SCHEDULED"] },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
       },
-      {
-        // BullMQ custom jobIds cannot contain ":"
-        jobId: `create-outbound-call-${cc.id}-${cc.attemptCount}-${Date.now()}`,
-        priority: campaign.priority,
-      },
-    );
+      data: { status: "INITIATING" },
+    });
+    if (claimed.count !== 1) continue;
+
+    try {
+      await ctx.enqueue(
+        "create_outbound_call",
+        {
+          organizationId,
+          campaignId,
+          campaignContactId: cc.id,
+          contactId: cc.contactId,
+          idempotencyKey: `outbound:${campaignId}:${cc.contactId}:${cc.attemptCount}`,
+        },
+        {
+          jobId: `create-outbound-call-${cc.id}-${cc.attemptCount}-${Date.now()}`,
+          priority: campaign.priority,
+        },
+      );
+    } catch (err) {
+      await db.campaignContact.updateMany({ where: { id: cc.id, status: "INITIATING" }, data: { status: "QUEUED" } });
+      throw err;
+    }
     enqueued += 1;
   }
 
@@ -75,7 +92,7 @@ export const scheduleCampaign: JobHandler<ScheduleCampaignData> = async (
   const remaining = await db.campaignContact.count({
     where: {
       campaignId,
-      status: "QUEUED",
+      status: { in: ["QUEUED", "RETRY_SCHEDULED"] },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
   });

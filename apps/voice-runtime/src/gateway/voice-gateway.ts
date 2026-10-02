@@ -12,7 +12,7 @@ import { base64ToBuffer, bufferToBase64 } from "../audio/formats.js";
 import { fetchCallSessionBootstrap } from "../lib/api-client.js";
 
 /** Exotel wants media chunks that are multiples of 320 bytes (20ms @ 8kHz PCM16). */
-const EXOTEL_FRAME_BYTES = 640; // 40ms — lower latency; no mid-speech silence pads
+const EXOTEL_FRAME_BYTES = 320; // 20ms @ 8kHz — lower playback latency
 
 /**
  * Voice gateway: bridges Exotel WebSocket media streams to CallSessions.
@@ -25,9 +25,19 @@ export class VoiceGateway {
     private readonly config: VoiceRuntimeConfig,
   ) {}
 
-  handleExotelSocket(socket: WebSocket): void {
+  handleExotelSocket(socket: WebSocket, req?: { url?: string }): void {
     if (this.config.MOCK_TELEPHONY || this.config.TELEPHONY_PROVIDER === "mock") {
       this.log.debug("Exotel WS accepted (mock telephony mode still parses events)");
+    }
+
+    let urlCallId: string | null = null;
+    if (req?.url) {
+      try {
+        const u = new URL(req.url, "http://localhost");
+        urlCallId = u.searchParams.get("callId");
+      } catch {
+        /* ignore */
+      }
     }
 
     let streamSid: string | null = null;
@@ -44,9 +54,10 @@ export class VoiceGateway {
       while (outboundBuf.length >= EXOTEL_FRAME_BYTES) {
         const frame = outboundBuf.subarray(0, EXOTEL_FRAME_BYTES);
         outboundBuf = outboundBuf.subarray(EXOTEL_FRAME_BYTES);
-        const msg: TelephonyOutboundMedia = {
+        const msg = {
           event: "media",
           stream_sid: streamSid,
+          streamSid: streamSid,
           media: { payload: bufferToBase64(frame) },
         };
         socket.send(JSON.stringify(msg));
@@ -60,8 +71,9 @@ export class VoiceGateway {
           JSON.stringify({
             event: "media",
             stream_sid: streamSid,
+            streamSid: streamSid,
             media: { payload: bufferToBase64(padded) },
-          } satisfies TelephonyOutboundMedia),
+          }),
         );
       }
     };
@@ -88,7 +100,7 @@ export class VoiceGateway {
           flushTimer = setTimeout(() => {
             flushTimer = null;
             flushOutbound(false);
-          }, 60);
+          }, 20);
         }
       },
       sendClear: () => {
@@ -117,18 +129,23 @@ export class VoiceGateway {
     };
 
     socket.on("message", (data) => {
-      void this.onExotelMessage(String(data), stream, {
-        get sessionId() {
-          return sessionId;
+      void this.onExotelMessage(
+        String(data),
+        stream,
+        {
+          get sessionId() {
+            return sessionId;
+          },
+          set sessionId(v: string | null) {
+            sessionId = v;
+          },
+          setStream(sid: string, cid: string) {
+            streamSid = sid;
+            callSid = cid;
+          },
         },
-        set sessionId(v: string | null) {
-          sessionId = v;
-        },
-        setStream(sid: string, cid: string) {
-          streamSid = sid;
-          callSid = cid;
-        },
-      });
+        urlCallId,
+      );
     });
 
     socket.on("close", () => {
@@ -154,6 +171,7 @@ export class VoiceGateway {
       sessionId: string | null;
       setStream: (streamSid: string, callSid: string) => void;
     },
+    urlCallId: string | null = null,
   ): Promise<void> {
     const event = parseTelephonyEvent(raw);
     if (!event) return;
@@ -180,6 +198,7 @@ export class VoiceGateway {
           params.callId ??
           params.CustomField ??
           params.customField ??
+          urlCallId ??
           start.callSid;
 
         let bootstrap;
@@ -228,6 +247,7 @@ export class VoiceGateway {
               agentName: bootstrap.agentName,
               companyName: bootstrap.companyName,
               agentPurpose: bootstrap.agentPurpose,
+              openingInstruction: bootstrap.openingInstruction,
             },
           },
           {

@@ -52,8 +52,8 @@ export async function buildServer(
   await registerHealthRoutes(app, sessions);
   await registerSessionRoutes(app, sessions);
 
-  app.get("/ws/exotel", { websocket: true }, (socket) => {
-    gateway.handleExotelSocket(socket);
+  app.get("/ws/exotel", { websocket: true }, (socket, req) => {
+    gateway.handleExotelSocket(socket, req);
   });
 
   app.get("/ws/session", { websocket: true }, (socket) => {

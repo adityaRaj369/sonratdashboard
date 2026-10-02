@@ -29,6 +29,10 @@ export const campaignsApi = {
   list: (query?: { cursor?: string; limit?: number; search?: string; status?: string }) =>
     http.get<CursorPage<Campaign>>(BASE, query),
   get: (id: string) => http.get<Campaign>(`${BASE}/${id}`),
+  preflight: (id: string) =>
+    http.get<{ ready: boolean; checks: Array<{ id: string; label: string; ready: boolean; message: string }> }>(
+      `${BASE}/${id}/preflight`,
+    ),
   create: (body: CreateCampaignInput) =>
     http.post<Campaign>(BASE, body, { idempotencyKey: crypto.randomUUID() }),
   update: (id: string, body: Partial<CreateCampaignInput>) =>
@@ -44,6 +48,8 @@ export const campaignsApi = {
       `${BASE}/${id}/contacts`,
       query,
     ),
+  addContacts: (id: string, contactIds: string[]) =>
+    http.post<{ added: number }>(`${BASE}/${id}/contacts`, { contactIds }),
   calls: (id: string, query?: { cursor?: string; limit?: number }) =>
     http.get<CursorPage<Call>>(`${BASE}/${id}/calls`, query),
 };

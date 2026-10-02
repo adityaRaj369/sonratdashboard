@@ -5,7 +5,7 @@ export type CursorPage<T> = {
 };
 
 export type ApiErrorBody = {
-  error?: string;
+  error?: string | { message?: string; code?: string; details?: unknown };
   message?: string;
   code?: string;
   details?: unknown;

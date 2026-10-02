@@ -199,20 +199,40 @@ async function main() {
     where: {
       organizationId_e164: {
         organizationId: org.id,
-        e164: "+918035701000",
+        e164: "+919513886363",
       },
     },
-    update: {},
+    update: {
+      displayName: "Exotel (09513886363)",
+      provider: "exotel",
+      inboundAgentId: agent.id,
+    },
     create: {
       organizationId: org.id,
-      e164: "+918035701000",
-      displayName: "Demo Exotel Number",
+      e164: "+919513886363",
+      displayName: "Exotel (09513886363)",
       inboundAgentId: agent.id,
-      provider: "mock",
+      provider: "exotel",
     },
   });
 
   const contacts = [
+    {
+      name: "Nitesh Kumar",
+      rawPhone: "9334977407",
+      normalizedPhone: "+919334977407",
+      countryCode: "IN",
+      tags: ["demo", "lead"],
+      source: "seed",
+    },
+    {
+      name: "Aditya Raj",
+      rawPhone: "9661048610",
+      normalizedPhone: "+919661048610",
+      countryCode: "IN",
+      tags: ["demo", "lead"],
+      source: "seed",
+    },
     {
       name: "Riya Sharma",
       rawPhone: "+919811112222",
@@ -243,7 +263,12 @@ async function main() {
           normalizedPhone: c.normalizedPhone,
         },
       },
-      update: {},
+      update: {
+        name: c.name,
+        rawPhone: c.rawPhone,
+        countryCode: c.countryCode,
+        tags: c.tags,
+      },
       create: {
         organizationId: org.id,
         ...c,
@@ -251,19 +276,16 @@ async function main() {
     });
   }
 
-  const existingCampaign = await prisma.campaign.findFirst({
+  let campaign = await prisma.campaign.findFirst({
     where: { organizationId: org.id, name: "Q1 Demo Outreach" },
   });
 
-  if (!existingCampaign) {
+  if (!campaign) {
     const version = await prisma.agentVersion.findFirst({
       where: { agentId: agent.id, status: "ACTIVE" },
     });
-    const allContacts = await prisma.contact.findMany({
-      where: { organizationId: org.id },
-    });
 
-    const campaign = await prisma.campaign.create({
+    campaign = await prisma.campaign.create({
       data: {
         organizationId: org.id,
         name: "Q1 Demo Outreach",
@@ -277,15 +299,26 @@ async function main() {
         timezone: "Asia/Kolkata",
       },
     });
+  }
 
-    for (const contact of allContacts) {
-      await prisma.campaignContact.create({
-        data: {
+  const allContacts = await prisma.contact.findMany({
+    where: { organizationId: org.id },
+  });
+
+  for (const contact of allContacts) {
+    await prisma.campaignContact.upsert({
+      where: {
+        campaignId_contactId: {
           campaignId: campaign.id,
           contactId: contact.id,
         },
-      });
-    }
+      },
+      update: {},
+      create: {
+        campaignId: campaign.id,
+        contactId: contact.id,
+      },
+    });
   }
 
   console.log("Seed complete");

@@ -9,16 +9,33 @@ export class ApiError extends Error {
   details?: unknown;
 
   constructor(status: number, body: ApiErrorBody | string) {
+    const nestedError =
+      typeof body === "object" && body.error && typeof body.error === "object"
+        ? (body.error as { message?: unknown; code?: unknown; details?: unknown })
+        : null;
+    const details =
+      typeof body === "object"
+        ? body.details ?? nestedError?.details
+        : undefined;
     const message =
       typeof body === "string"
         ? body
-        : body.message || body.error || `Request failed (${status})`;
-    super(message);
+        : typeof body.message === "string"
+          ? body.message
+          : typeof nestedError?.message === "string"
+            ? nestedError.message
+            : `Request failed (${status})`;
+    super(validationMessage(details) ? `${message}: ${validationMessage(details)}` : message);
     this.name = "ApiError";
     this.status = status;
     if (typeof body !== "string") {
-      this.code = body.code;
-      this.details = body.details;
+      this.code =
+        typeof body.code === "string"
+          ? body.code
+          : typeof nestedError?.code === "string"
+            ? nestedError.code
+            : undefined;
+      this.details = details;
     }
   }
 }
@@ -32,6 +49,18 @@ type RequestOptions = {
   signal?: AbortSignal;
   formData?: FormData;
 };
+
+function validationMessage(details: unknown): string | undefined {
+  if (!details || typeof details !== "object") return undefined;
+  const value = details as {
+    fieldErrors?: Record<string, string[]>;
+    formErrors?: string[];
+  };
+  const fields = Object.entries(value.fieldErrors ?? {}).flatMap(([field, messages]) =>
+    (messages ?? []).map((message) => `${field}: ${message}`),
+  );
+  return [...(value.formErrors ?? []), ...fields].filter(Boolean).join("; ") || undefined;
+}
 
 function buildUrl(path: string, query?: RequestOptions["query"]) {
   const absolute =

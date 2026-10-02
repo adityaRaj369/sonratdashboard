@@ -27,9 +27,19 @@ export default function ModuleSubnav({
     <div className="shrink-0 border-b border-slate-50 bg-white px-4 py-3">
       <div className="flex flex-wrap gap-2">
         {items.map((item) => {
-          const active =
-            path === item.route ||
-            (item.route !== service.route && path.startsWith(`${item.route}/`));
+          const isExact = path === item.route;
+          const isSubRoute =
+            item.route !== service.route && path.startsWith(`${item.route}/`);
+          const isMainServiceSubroute =
+            item.route === service.route &&
+            path.startsWith(`${service.route}/`) &&
+            !items.some(
+              (other) =>
+                other.route !== item.route &&
+                (path === other.route || path.startsWith(`${other.route}/`)),
+            );
+          const active = isExact || isSubRoute || isMainServiceSubroute;
+
           return (
             <button
               key={item.route}

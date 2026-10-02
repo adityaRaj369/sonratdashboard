@@ -81,8 +81,12 @@ export function configToPromptLayers(
     policies: config.knowledge.policies.join("\n"),
     faqs: config.knowledge.faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join("\n"),
     businessRules: [
-      ...config.safety.prohibitedTopics.map((t) => `Prohibited: ${t}`),
+      ...config.safety.prohibitedTopics.map((t) => `Prohibited topic: ${t}`),
       ...config.safety.unsupportedClaims.map((t) => `Do not claim: ${t}`),
+      // Support section rules — never leave these out
+      ...config.support.prohibitedAnswers.map((t) => `Never answer: ${t}`),
+      ...config.support.escalationRules.map((t) => `Escalation rule: ${t}`),
+      ...config.support.supportWorkflows.map((t) => `Support workflow: ${t}`),
     ].join("\n"),
     salesObjective: config.sales.primaryObjective,
     qualificationQuestions: config.sales.qualificationQuestions.join("\n"),

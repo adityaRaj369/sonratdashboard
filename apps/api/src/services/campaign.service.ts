@@ -10,6 +10,19 @@ import { enqueueJob, QUEUE_NAMES } from "../lib/queue.js";
 import { cursorWhere, paginateByCreatedAt } from "../lib/pagination.js";
 import { AdmissionControlService } from "./admission-control.service.js";
 import { AuditService } from "./audit.service.js";
+import { AgentService } from "./agent.service.js";
+import { getConfig } from "@sonrat/config";
+
+async function isVoiceRuntimeReady(baseUrl: string) {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 export class CampaignService {
   constructor(
@@ -17,12 +30,20 @@ export class CampaignService {
     private readonly admission = new AdmissionControlService(),
   ) {}
 
-  async list(organizationId: string, opts: { cursor?: string; limit: number; status?: string }) {
+  async list(organizationId: string, opts: { cursor?: string; limit: number; status?: string; search?: string }) {
     const rows = await db.campaign.findMany({
       where: {
         organizationId,
         deletedAt: null,
         ...(opts.status ? { status: opts.status as never } : {}),
+        ...(opts.search
+          ? {
+              OR: [
+                { name: { contains: opts.search, mode: "insensitive" as const } },
+                { objective: { contains: opts.search, mode: "insensitive" as const } },
+              ],
+            }
+          : {}),
         ...(cursorWhere(opts.cursor) ?? {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -47,6 +68,41 @@ export class CampaignService {
     });
     if (!campaign) throw new NotFoundError("Campaign");
     return campaign;
+  }
+
+  async preflight(organizationId: string, campaignId: string) {
+    const campaign = await this.get(organizationId, campaignId);
+    const config = getConfig();
+    const agentReady = Boolean(
+      campaign.agent?.activeVersionId && campaign.agent.status === "PUBLISHED",
+    );
+    const phoneReady = Boolean(
+      campaign.phoneNumber?.isActive || getConfig().EXOTEL_PHONE_NUMBER,
+    );
+    const contactCount = await db.campaignContact.count({
+      where: {
+        campaignId,
+        contact: { callability: "callable", deletedAt: null },
+      },
+    });
+    const providerReady =
+      config.MOCK_TELEPHONY ||
+      (config.TELEPHONY_PROVIDER === "exotel" &&
+        Boolean(
+          config.EXOTEL_API_KEY &&
+            config.EXOTEL_API_TOKEN &&
+            config.EXOTEL_ACCOUNT_SID,
+        ));
+    const voiceRuntimeReady =
+      config.MOCK_TELEPHONY || (await isVoiceRuntimeReady(config.VOICE_RUNTIME_URL));
+    const checks = [
+      { id: "agent", label: "Published agent", ready: agentReady, message: agentReady ? "Ready" : "Publish the selected agent" },
+      { id: "phone", label: "Caller number", ready: phoneReady, message: phoneReady ? "Ready" : "Configure an active Exotel number" },
+      { id: "contacts", label: "Callable contacts", ready: contactCount > 0, message: contactCount > 0 ? `${contactCount} callable contact${contactCount === 1 ? "" : "s"}` : "Add at least one callable contact" },
+      { id: "provider", label: "Telephony provider", ready: providerReady, message: providerReady ? "Configured" : "Configure Exotel credentials" },
+      { id: "voice-runtime", label: "AI voice connection", ready: voiceRuntimeReady, message: voiceRuntimeReady ? "Reachable" : "AI voice runtime is not reachable; no call will be placed" },
+    ];
+    return { ready: checks.every((check) => check.ready), checks };
   }
 
   async create(organizationId: string, userId: string, input: unknown) {
@@ -146,20 +202,91 @@ export class CampaignService {
   async start(organizationId: string, userId: string, campaignId: string) {
     const campaign = await this.get(organizationId, campaignId);
 
-    if (!["DRAFT", "SCHEDULED", "PAUSED"].includes(campaign.status)) {
+    if (!["DRAFT", "SCHEDULED", "PAUSED", "COMPLETED"].includes(campaign.status)) {
       throw new ConflictError(`Cannot start campaign in status ${campaign.status}`);
+    }
+
+    // Never spend telephony credits unless the public AI WebSocket endpoint is live.
+    const preflight = await this.preflight(organizationId, campaignId);
+    if (!preflight.ready) {
+      const failed = preflight.checks
+        .filter((check) => !check.ready)
+        .map((check) => `${check.label}: ${check.message}`)
+        .join("; ");
+      throw new ValidationError(`Campaign is not ready to start. ${failed}`);
+    }
+
+    // When resuming from PAUSED or restarting from COMPLETED:
+    if (campaign.status === "COMPLETED") {
+      // Full restart: reset all contacts so they can be dialed again
+      await db.campaignContact.updateMany({
+        where: { campaignId },
+        data: {
+          status: "QUEUED",
+          attemptCount: 0,
+          nextAttemptAt: null,
+          lastCallId: null,
+        },
+      });
+    } else if (campaign.status === "PAUSED") {
+      const pendingCount = await db.campaignContact.count({
+        where: {
+          campaignId,
+          status: { in: ["QUEUED", "RETRY_SCHEDULED"] },
+        },
+      });
+
+      if (pendingCount === 0) {
+        await db.campaignContact.updateMany({
+          where: {
+            campaignId,
+            status: { notIn: ["CONNECTED"] },
+          },
+          data: {
+            status: "QUEUED",
+            nextAttemptAt: null,
+          },
+        });
+      } else {
+        await db.campaignContact.updateMany({
+          where: {
+            campaignId,
+            status: "RETRY_SCHEDULED",
+          },
+          data: {
+            status: "QUEUED",
+            nextAttemptAt: null,
+          },
+        });
+      }
     }
 
     const agent = await db.agent.findFirst({
       where: { id: campaign.agentId, organizationId, deletedAt: null },
     });
-    if (!agent?.activeVersionId || agent.status !== "PUBLISHED") {
-      throw new ValidationError("Campaign agent must have an active published version");
+    if (!agent) throw new NotFoundError("Agent");
+
+    let version = agent.activeVersionId
+      ? await db.agentVersion.findFirst({
+          where: { id: agent.activeVersionId, agentId: agent.id, status: "ACTIVE" },
+        })
+      : null;
+
+    // If agent has no active version or was edited into DRAFT status, auto-publish it
+    if (!version || agent.status === "DRAFT") {
+      try {
+        const agentService = new AgentService(this.audit);
+        const published = await agentService.publish(organizationId, userId, agent.id);
+        version = published.version;
+      } catch (err) {
+        if (!version) {
+          throw new ValidationError(
+            `Agent "${agent.name}" configuration is incomplete: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
     }
 
-    const version = await db.agentVersion.findFirst({
-      where: { id: agent.activeVersionId, agentId: agent.id, status: "ACTIVE" },
-    });
     if (!version) {
       throw new ValidationError("Published agent version not found");
     }
@@ -181,6 +308,7 @@ export class CampaignService {
           status: "RUNNING",
           agentVersionId: version.id,
           startAt: campaign.startAt ?? new Date(),
+          endAt: null,
         },
       });
 
@@ -289,7 +417,7 @@ export class CampaignService {
     campaignId: string,
     contactIds: string[],
   ) {
-    await this.get(organizationId, campaignId);
+    const campaign = await this.get(organizationId, campaignId);
     const schema = z.object({ contactIds: z.array(z.string().uuid()).min(1) });
     schema.parse({ contactIds });
 
@@ -302,6 +430,19 @@ export class CampaignService {
       data: valid.map((c) => ({ campaignId, contactId: c.id })),
       skipDuplicates: true,
     });
+
+    if (campaign.status === "RUNNING") {
+      await enqueueJob(
+        QUEUE_NAMES.CAMPAIGN_DISPATCH,
+        "schedule_campaign",
+        {
+          organizationId,
+          campaignId,
+          agentVersionId: campaign.agentVersionId ?? undefined,
+        },
+        { jobId: `campaign-schedule-${campaignId}-${Date.now()}` },
+      );
+    }
 
     await this.audit.log({
       organizationId,

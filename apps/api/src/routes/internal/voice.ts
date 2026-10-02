@@ -14,6 +14,28 @@ const voice = new Hono();
 const tools = new ToolService();
 const callState = new CallStateService();
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const callInclude = {
+  contact: true,
+  campaign: true,
+  agentVersion: true,
+  agent: true,
+  conversation: true,
+} as const;
+
+async function findCallByIdOrProvider(callId: string) {
+  const where = UUID_RE.test(callId)
+    ? { OR: [{ id: callId }, { providerCallId: callId }] }
+    : { providerCallId: callId };
+
+  return db.call.findFirst({
+    where,
+    include: callInclude,
+  });
+}
+
 /** Internal auth between voice-runtime and API via shared AUTH_SECRET bearer. */
 function assertInternalAuth(c: { req: { header: (n: string) => string | undefined } }) {
   const config = getConfig();
@@ -38,34 +60,57 @@ voice.post(
     const callId = c.req.param("callId")!;
     const body = c.req.valid("json");
 
-    const call = await db.call.findUnique({
-      where: { id: callId },
-      include: {
-        contact: true,
-        campaign: true,
-        agentVersion: true,
-        agent: true,
-      },
-    });
+    const call = await findCallByIdOrProvider(callId);
     if (!call) throw new NotFoundError("Call");
+    if (!call.agentVersion || !call.agent) {
+      throw new ValidationError("Call has no active agent version");
+    }
 
     const flowInstructions = await resolveFlowInstructions(
       call.organizationId,
       call.agentVersion.config,
     );
 
+    // Compose campaign-level instructions into the prompt so the AI follows
+    // the per-campaign objective, sales script, and operational notes.
+    const campaignPromptSupplement = [
+      call.campaign?.salesInstructions,
+      call.campaign?.campaignInstructions,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const combinedFlowInstructions = [
+      flowInstructions,
+      campaignPromptSupplement,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Build rich customer context: include custom fields if present.
+    const contactCustomFields = call.contact?.customFields &&
+      typeof call.contact.customFields === "object" &&
+      Object.keys(call.contact.customFields as object).length > 0
+        ? `Custom fields: ${JSON.stringify(call.contact.customFields)}`
+        : null;
+
     const runtime = buildPromptFromDraft(call.agentVersion.config, {
       customerName: body.customerName ?? call.contact?.name ?? "Customer",
       customerContext:
         body.customerContext ??
-        [call.contact?.company, call.contact?.notes, call.contact?.leadStatus]
+        [
+          call.contact?.company,
+          call.contact?.notes,
+          call.contact?.leadStatus,
+          contactCustomFields,
+        ]
           .filter(Boolean)
           .join(" | "),
       campaignName: call.campaign?.name ?? "",
       organizationId: call.organizationId,
       agentId: call.agentId,
       agentVersionId: call.agentVersionId,
-      flowInstructions,
+      flowInstructions: combinedFlowInstructions || undefined,
     });
 
     const configJson = call.agentVersion.config as {
@@ -83,10 +128,11 @@ voice.post(
     const direction =
       call.direction === "INBOUND" ? ("inbound" as const) : ("outbound" as const);
 
+    const languageInstruction = `Start in ${runtime.defaultLanguage}. Supported languages: ${runtime.supportedLanguages.join(", ")}. ${runtime.supportedLanguages.length > 1 ? "If the customer clearly switches to a supported language, follow them naturally." : "Do not switch languages unless the customer explicitly requests it."}`;
     const openingInstruction =
       direction === "inbound" || agentPurpose === "support"
-        ? `You are ${agentName} from ${companyName} on a live support call. Greet briefly in the customer's language, state you are from ${companyName}, and ask how you can help with their issue. One short sentence only. Do not say you are Gemini or Google.`
-        : `You are ${agentName} from ${companyName} on a live outbound sales call. Greet briefly, introduce yourself and ${companyName}, and state why you are calling in one short natural sentence. Do not say you are Gemini or Google. Do not ask a generic "how can I help" unless the customer asks first.`;
+        ? `You are ${agentName} from ${companyName} on a live support call. ${languageInstruction} Greet briefly, state you are from ${companyName}, and ask how you can help with their issue. One short sentence only. Do not say you are Gemini or Google.`
+        : `You are ${agentName} from ${companyName} on a live outbound sales call. ${languageInstruction} Greet briefly, introduce yourself and ${companyName}, and state why you are calling in one short natural sentence. Do not say you are Gemini or Google. Do not ask a generic "how can I help" unless the customer asks first.`;
 
     const ai = createAiProvider();
     const session = await ai.buildSessionConfig({
@@ -161,7 +207,7 @@ voice.post(
   ),
   async (c) => {
     assertInternalAuth(c);
-    const call = await db.call.findUnique({ where: { id: c.req.param("callId")! } });
+    const call = await findCallByIdOrProvider(c.req.param("callId")!);
     if (!call) throw new NotFoundError("Call");
 
     const body = c.req.valid("json");
@@ -189,7 +235,7 @@ voice.post(
   ),
   async (c) => {
     assertInternalAuth(c);
-    const call = await db.call.findUnique({ where: { id: c.req.param("callId")! } });
+    const call = await findCallByIdOrProvider(c.req.param("callId")!);
     if (!call) throw new NotFoundError("Call");
     const body = c.req.valid("json");
 
@@ -219,10 +265,7 @@ voice.post(
   ),
   async (c) => {
     assertInternalAuth(c);
-    const call = await db.call.findUnique({
-      where: { id: c.req.param("callId")! },
-      include: { conversation: true },
-    });
+    const call = await findCallByIdOrProvider(c.req.param("callId")!);
     if (!call) throw new NotFoundError("Call");
     if (!call.conversation) throw new ValidationError("Conversation not initialized");
 

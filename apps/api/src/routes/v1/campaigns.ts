@@ -19,7 +19,7 @@ campaigns.get(
   requirePerm("campaigns.read"),
   zValidator(
     "query",
-    paginationSchema.extend({ status: z.string().optional() }),
+    paginationSchema.extend({ status: z.string().optional(), search: z.string().optional() }),
   ),
   async (c) => {
     const q = c.req.valid("query");
@@ -27,6 +27,7 @@ campaigns.get(
       cursor: q.cursor,
       limit: q.limit,
       status: q.status,
+      search: q.search,
     });
     return c.json(page);
   },
@@ -46,6 +47,10 @@ campaigns.post(
 campaigns.get("/:id", requirePerm("campaigns.read"), async (c) => {
   const campaign = await service.get(getOrgId(c), c.req.param("id")!);
   return c.json(campaign);
+});
+
+campaigns.get("/:id/preflight", requirePerm("campaigns.read"), async (c) => {
+  return c.json(await service.preflight(getOrgId(c), c.req.param("id")!));
 });
 
 campaigns.patch(

@@ -1,13 +1,16 @@
-"use client";
-
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceNavigate } from "@/components/workspace/WorkspaceNav";
 import { Button, Field, Input, Select, Textarea, useToast } from "@/components/ui";
 import { useAgents } from "@/hooks/use-agents";
 import { useContacts } from "@/hooks/use-contacts";
 import { useCreateCampaign } from "../hooks";
 import { usePhoneNumbers } from "@/hooks/use-settings";
+import { parseCsvText } from "@/lib/csv";
+import { contactsApi } from "@/services/api/contacts";
+import type { Contact } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Upload, Search, CheckSquare, Square } from "lucide-react";
 
 const STEPS = [
   "Details",
@@ -27,6 +30,10 @@ type Props = {
 /** Create-campaign wizard used inside WorkspacePanel (SEAM inline editor pattern). */
 export default function CampaignCreateInlineEditor({ onClose, onCreated }: Props) {
   const [step, setStep] = useState(0);
+  const [uploadingCsv, setUploadingCsv] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [recentlyUploaded, setRecentlyUploaded] = useState<Contact[]>([]);
+  const qc = useQueryClient();
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -42,16 +49,26 @@ export default function CampaignCreateInlineEditor({ onClose, onCreated }: Props
     maxAttempts: 1,
     retryDelayMinutes: 60,
     concurrencyLimit: 1,
-    callTimeoutSeconds: 120,
+    callTimeoutSeconds: 60,
     callbackBehavior: "Offer a callback during business hours",
     priority: 5,
   });
   const agents = useAgents({ limit: 100 });
   const phones = usePhoneNumbers();
-  const contacts = useContacts({ limit: 100 });
+  const contacts = useContacts({ limit: 250 });
   const create = useCreateCampaign();
   const router = useWorkspaceNavigate();
   const { toast } = useToast();
+
+  const displayedContacts = useMemo(() => {
+    const list = [...recentlyUploaded, ...(contacts.data?.items || [])];
+    const seen = new Set<string>();
+    return list.filter((c) => {
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
+  }, [recentlyUploaded, contacts.data?.items]);
 
   const canNext = useMemo(() => {
     if (step === 0) return Boolean(form.name.trim());
@@ -171,56 +188,175 @@ export default function CampaignCreateInlineEditor({ onClose, onCreated }: Props
         )}
 
         {step === 3 && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-muted-foreground">
-                Select contacts to include ({form.contactIds.length} selected)
+          <div className="space-y-4">
+            {/* Direct CSV dropzone */}
+            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 text-center transition-colors hover:border-primary/60">
+              <Upload className="mx-auto h-6 w-6 text-primary mb-1.5" />
+              <h4 className="text-sm font-semibold text-foreground">
+                Upload CSV / Excel Contact List
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-sm mx-auto">
+                Upload a spreadsheet with Name and Phone columns. Contacts will be added and selected automatically.
               </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => router.push("/contacts/import")}
-              >
-                Import Excel / CSV
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Upload a sales list under Contacts → Import, then return here and
-              select those contacts.
-            </p>
-            <div className="max-h-80 space-y-1 overflow-y-auto rounded-md border border-border p-2">
-              {contacts.data?.items.map((contact) => {
-                const checked = form.contactIds.includes(contact.id);
-                return (
-                  <label
-                    key={contact.id}
-                    className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        setForm({
-                          ...form,
-                          contactIds: e.target.checked
-                            ? [...form.contactIds, contact.id]
-                            : form.contactIds.filter((id) => id !== contact.id),
+              <div className="mt-3 flex justify-center">
+                <label className="relative cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    className="sr-only"
+                    disabled={uploadingCsv}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingCsv(true);
+                      try {
+                        const text = await file.text();
+                        const parsed = parseCsvText(text);
+                        if (!parsed.length) {
+                          toast({
+                            title: "No valid contacts found in CSV",
+                            description: "Make sure your file has Name and Phone columns.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        const res = await contactsApi.batchCreate(parsed);
+                        if (res.items.length > 0) {
+                          setRecentlyUploaded((prev) => [...res.items, ...prev]);
+                          const newIds = res.items.map((c) => c.id);
+                          setForm((prev) => ({
+                            ...prev,
+                            contactIds: Array.from(new Set([...prev.contactIds, ...newIds])),
+                          }));
+                        }
+                        await qc.invalidateQueries({ queryKey: ["contacts"] });
+                        await contacts.refetch();
+                        toast({
+                          title: `Added ${res.count} contacts`,
+                          description: `Successfully loaded from ${file.name}`,
+                          variant: "success",
                         });
-                      }}
-                    />
-                    <span className="font-medium">{contact.name}</span>
-                    <span className="text-muted-foreground">
-                      {contact.normalizedPhone || contact.rawPhone}
-                    </span>
-                  </label>
-                );
-              })}
-              {!contacts.data?.items.length && (
-                <p className="p-2 text-sm text-muted-foreground">
-                  No contacts yet. Import an Excel list first.
-                </p>
-              )}
+                      } catch (err) {
+                        toast({
+                          title: "Upload failed",
+                          description: err instanceof Error ? err.message : undefined,
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setUploadingCsv(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingCsv ? "Parsing & importing…" : "Select CSV file"}
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Contact list controls */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Contacts ({form.contactIds.length} selected of {displayedContacts.length})
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const allIds = displayedContacts.map((c) => c.id);
+                      setForm((prev) => ({
+                        ...prev,
+                        contactIds: Array.from(new Set([...prev.contactIds, ...allIds])),
+                      }));
+                    }}
+                  >
+                    <CheckSquare className="mr-1 h-3.5 w-3.5" />
+                    Select all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => setForm((prev) => ({ ...prev, contactIds: [] }))}
+                  >
+                    <Square className="mr-1 h-3.5 w-3.5" />
+                    Deselect all
+                  </Button>
+                </div>
+              </div>
+
+              {/* Search filter input */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  className="pl-8 text-xs h-8"
+                  placeholder="Filter contacts by name or phone…"
+                  value={contactSearch}
+                  onChange={(e) => setContactSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Scrollable contact list */}
+              <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border bg-background p-2">
+                {displayedContacts
+                  .filter((contact) => {
+                    if (!contactSearch.trim()) return true;
+                    const q = contactSearch.toLowerCase();
+                    return (
+                      contact.name?.toLowerCase().includes(q) ||
+                      contact.normalizedPhone?.includes(q) ||
+                      contact.rawPhone?.includes(q) ||
+                      contact.company?.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((contact) => {
+                    const checked = form.contactIds.includes(contact.id);
+                    return (
+                      <label
+                        key={contact.id}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors cursor-pointer",
+                          checked ? "bg-primary/10 font-medium" : "hover:bg-muted",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                          checked={checked}
+                          onChange={(e) => {
+                            setForm({
+                              ...form,
+                              contactIds: e.target.checked
+                                ? [...form.contactIds, contact.id]
+                                : form.contactIds.filter((id) => id !== contact.id),
+                            });
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-foreground">
+                            {contact.name}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {contact.normalizedPhone || contact.rawPhone}
+                            {contact.company ? ` · ${contact.company}` : ""}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                {!displayedContacts.length && (
+                  <div className="p-4 text-center text-xs text-muted-foreground">
+                    No contacts in organization yet. Upload a CSV above to create contacts instantly.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

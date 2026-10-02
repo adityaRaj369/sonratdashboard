@@ -110,6 +110,10 @@ export function assertCallingWindow(params: {
   end: string;
   timeZone: string;
 }): void {
+  if (process.env.DEMO_MODE === "true" || process.env.NODE_ENV === "development") {
+    // In demo or development mode, allow instant dialing for testing
+    return;
+  }
   const now = params.now ?? new Date();
   if (!isWithinCallingHours(now, params.start, params.end, params.timeZone)) {
     throw new TransientJobError(

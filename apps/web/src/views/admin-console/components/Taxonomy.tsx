@@ -816,7 +816,7 @@ export default function Taxonomy({
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rose-400">Delete Field</p>
               <h3 className="text-xl font-black text-slate-900">Remove module field?</h3>
               <p className="text-xs text-slate-500 mt-2">
-                This will remove "{termDeleteConfirm.term?.value}" from the list.
+                This will remove &quot;{termDeleteConfirm.term?.value}&quot; from the list.
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-3">

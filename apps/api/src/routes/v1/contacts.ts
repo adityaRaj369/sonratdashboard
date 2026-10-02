@@ -50,6 +50,17 @@ contacts.post(
   },
 );
 
+contacts.post(
+  "/batch",
+  requirePerm("contacts.write"),
+  zValidator("json", z.object({ contacts: z.array(z.record(z.unknown())).min(1) })),
+  async (c) => {
+    const body = c.req.valid("json");
+    const created = await service.batchCreate(getOrgId(c), getUserId(c), body.contacts);
+    return c.json({ items: created, count: created.length }, 201);
+  },
+);
+
 async function uploadImport(c: Context<{ Variables: AppVariables }>) {
   const body = await c.req.parseBody();
   const file = body["file"];

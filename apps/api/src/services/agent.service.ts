@@ -32,10 +32,18 @@ const SECTION_SCHEMAS: Record<string, z.ZodTypeAny> = {
 export class AgentService {
   constructor(private readonly audit = new AuditService()) {}
 
-  async list(organizationId: string, opts: { cursor?: string; limit: number }) {
+  async list(organizationId: string, opts: { cursor?: string; limit: number; search?: string }) {
     const where = {
       organizationId,
       deletedAt: null,
+      ...(opts.search
+        ? {
+            OR: [
+              { name: { contains: opts.search, mode: "insensitive" as const } },
+              { description: { contains: opts.search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
       ...(cursorWhere(opts.cursor) ?? {}),
     };
     const rows = await db.agent.findMany({
@@ -77,12 +85,22 @@ export class AgentService {
         flowId: null,
       },
       languages: {
-        supportedLanguages: ["en", "hi"],
-        defaultLanguage: "en",
+        supportedLanguages: [data.defaultLanguage],
+        defaultLanguage: data.defaultLanguage,
         languageDetection: true,
         languageSwitching: true,
-        fallbackLanguage: "en",
+        fallbackLanguage: data.defaultLanguage,
       },
+      company: { companyName: data.companyName, companyDescription: null, website: "", address: null, contactEmail: "", contactPhone: null, businessHours: [], timezone: "UTC", locations: [] },
+      products: [],
+      knowledge: { faqs: [], policies: [], supportInformation: [], salesInformation: [], additionalKnowledge: [], documents: [] },
+      personality: { personality: "Helpful, confident, and respectful", tone: "Warm and professional", friendliness: 7, professionalism: 8, verbosity: "concise", speakingStyle: "Use short, natural sentences and ask one question at a time." },
+      voice: { voiceProvider: "gemini", voiceId: "Kore", voiceGender: "neutral", language: data.defaultLanguage, style: "Warm, natural, conversational, and human", speed: 1 },
+      sales: { primaryObjective: data.primaryObjective, secondaryObjectives: [], qualificationQuestions: [], discoveryQuestions: [], offers: [], objectionHandling: [], closingBehavior: "Ask permission before scheduling a follow-up or creating a lead.", leadQualificationRules: [] },
+      support: { supportWorkflows: [], escalationRules: [], humanHandoffRules: [], prohibitedAnswers: [], issueCategories: [] },
+      safety: { prohibitedTopics: [], unsupportedClaims: [], privacyBehavior: "Never request or repeat sensitive information unless required for the customer's request.", sensitiveInformationRules: [], escalationRequirements: [] },
+      callBehavior: { greeting: "Hello, this is the company team. How are you today?", interruptionHandling: "Stop speaking immediately and listen.", silenceBehavior: "Ask a brief clarifying question after a short pause.", closing: "Thank the customer and clearly explain the next step.", maximumCallDurationSeconds: 600, callbackBehavior: null, callEndRules: [] },
+      tools: { enabledTools: [] },
     };
 
     const agent = await db.agent.create({
