@@ -174,7 +174,7 @@ export class CallService {
       streamUrl: `${getConfig().VOICE_RUNTIME_URL.replace(/^http/i, "ws")}/ws/exotel?callId=${encodeURIComponent(call.id)}`,
       flowUrl: getConfig().EXOTEL_FLOW_URL,
       customField: call.id,
-      record: true,
+      record: false,
     });
 
     await db.call.update({

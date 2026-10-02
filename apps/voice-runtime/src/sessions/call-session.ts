@@ -175,18 +175,45 @@ export class CallSession {
     );
   }
 
+  private calculateRmsPcm16(buf: Buffer): number {
+    const count = Math.floor(buf.length / 2);
+    if (count === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < buf.length - 1; i += 2) {
+      const s = buf.readInt16LE(i);
+      sum += s * s;
+    }
+    return Math.sqrt(sum / count);
+  }
+
+  private isAiSpeaking = false;
+  private speakingTimeout?: ReturnType<typeof setTimeout>;
+  private consecutiveSpeechFrames = 0;
+
   async handleInboundAudio(payloadBase64: string): Promise<void> {
     if (!this.ai || (this.status !== "active" && this.status !== "interrupted")) {
       return;
     }
     const raw = base64ToBuffer(payloadBase64);
 
-    // Do NOT local-barge-in on energy: Exotel always sends media frames, and
-    // clearing mid-utterance caused jitter/cutoffs. Gemini Live handles
-    // interruption via its own VAD when we keep streaming caller audio.
-
     const forAi = this.pipeline.telephonyToAi(raw);
     await this.ai.sendAudio(forAi);
+
+    // Active instant barge-in detection: if the AI is actively talking and caller starts speaking
+    if (this.isAiSpeaking) {
+      const rms = this.calculateRmsPcm16(forAi);
+      if (rms > 2400) {
+        this.consecutiveSpeechFrames += 1;
+        if (this.consecutiveSpeechFrames >= 2) {
+          this.consecutiveSpeechFrames = 0;
+          this.log.info({ rms }, "caller voice barge-in detected, cutting off AI audio");
+          await this.handleBargeIn();
+        }
+      } else {
+        this.consecutiveSpeechFrames = 0;
+      }
+    }
+
     await this.events.emit(
       createDomainEvent("audio.inbound", this.id, { bytes: raw.length }, {
         callId: this.context.callId,
@@ -196,10 +223,13 @@ export class CallSession {
   }
 
   async handleBargeIn(): Promise<void> {
+    this.isAiSpeaking = false;
+    this.consecutiveSpeechFrames = 0;
+    if (this.speakingTimeout) clearTimeout(this.speakingTimeout);
     const gen = this.pipeline.handleBargeIn();
     this.status = "interrupted";
     await this.ai?.interrupt();
-    this.log.info({ generation: gen }, "barge-in");
+    this.log.info({ generation: gen }, "barge-in completed, audio cleared");
     // Allow new AI audio shortly after
     this.pipeline.resumeAfterBargeIn();
     this.status = "active";
@@ -223,6 +253,11 @@ export class CallSession {
       for await (const event of this.ai.receiveEvents()) {
         switch (event.type) {
           case "audio": {
+            this.isAiSpeaking = true;
+            if (this.speakingTimeout) clearTimeout(this.speakingTimeout);
+            this.speakingTimeout = setTimeout(() => {
+              this.isAiSpeaking = false;
+            }, 600);
             const converted = this.pipeline.aiToTelephony(
               event.data,
               event.generation,
@@ -330,9 +365,8 @@ export class CallSession {
             break;
           }
           case "interrupted": {
-            // Gemini detected barge-in — clear Exotel playback buffer only.
-            this.pipeline.handleBargeIn();
-            this.pipeline.resumeAfterBargeIn();
+            this.log.info("Gemini Live interrupted event received from model");
+            await this.handleBargeIn();
             break;
           }
           case "error": {

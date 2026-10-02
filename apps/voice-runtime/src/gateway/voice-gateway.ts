@@ -114,6 +114,7 @@ export class VoiceGateway {
           JSON.stringify({
             event: "clear",
             stream_sid: streamSid,
+            streamSid: streamSid,
           }),
         );
       },

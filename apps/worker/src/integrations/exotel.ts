@@ -26,6 +26,15 @@ export interface TelephonyClient {
   hangup(providerCallId: string): Promise<void>;
 }
 
+function exotelCallLimitSeconds(requested?: number): number {
+  const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 600);
+  const hardLimit = Number.isFinite(configured)
+    ? Math.min(Math.max(Math.floor(configured), 30), 1800)
+    : 600;
+  const requestedLimit = Number.isFinite(requested) ? Math.floor(requested as number) : hardLimit;
+  return Math.min(Math.max(requestedLimit, 30), hardLimit);
+}
+
 export class MockExotelClient implements TelephonyClient {
   private readonly log = childLogger({ component: "exotel-mock" });
 
@@ -107,8 +116,13 @@ export class ExotelClient implements TelephonyClient {
     if (req.timeoutSeconds) {
       // TimeOut only controls unanswered ringing. TimeLimit is the hard cap
       // for an answered call; without it a live AI call can bill indefinitely.
-      params.TimeOut = String(Math.min(req.timeoutSeconds, 60));
-      params.TimeLimit = String(Math.min(req.timeoutSeconds, 600));
+      const callLimitSeconds = exotelCallLimitSeconds(req.timeoutSeconds);
+      params.TimeOut = String(Math.min(callLimitSeconds, 60));
+      params.TimeLimit = String(callLimitSeconds);
+    } else {
+      // Always send a billing cap, even when an older campaign has no timeout.
+      params.TimeOut = "60";
+      params.TimeLimit = String(exotelCallLimitSeconds());
     }
     if (req.customParameters?.callId) {
       // Exotel CustomField is free-form; keep it a bare call UUID (no & pairs —

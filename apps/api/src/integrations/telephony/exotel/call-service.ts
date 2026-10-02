@@ -6,25 +6,53 @@ import type {
 } from "../types.js";
 import { ExotelClient, type ExotelCallResource } from "./client.js";
 
+function exotelCallLimitSeconds(requested?: number): number {
+  const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 600);
+  const hardLimit = Number.isFinite(configured)
+    ? Math.min(Math.max(Math.floor(configured), 30), 1800)
+    : 600;
+  const requestedLimit = Number.isFinite(requested) ? Math.floor(requested as number) : hardLimit;
+  return Math.min(Math.max(requestedLimit, 30), hardLimit);
+}
+
+function normalizeExotelPhone(raw: string): string {
+  const digits = raw.replace(/[^\d+]/g, "");
+  const m = digits.match(/^(?:\+?91)?(\d{10})$/);
+  if (m) return `0${m[1]}`;
+  if (/^0\d{10}$/.test(digits)) return digits;
+  return raw.replace(/[-\s]/g, "");
+}
+
 /**
  * Exotel Voice API adapter.
  * Docs: https://developer.exotel.com/api/make-a-call-api
  *
- * Connects two legs: From (Exotel virtual number / caller) and To (customer).
- * StatusCallback receives call lifecycle webhooks.
+ * For AI voicebot / streaming calls, uses single-leg transactional call (CallType: "trans",
+ * From = destination, CallerId = virtual number) to prevent Exotel from billing 2 separate legs.
  */
 export class ExotelCallService implements TelephonyProvider {
   constructor(private readonly client: ExotelClient) {}
 
   async placeOutboundCall(input: PlaceCallInput): Promise<PlaceCallResult> {
-    const body: Record<string, string> = {
-      From: input.from,
-      To: input.to,
-      CallerId: input.from,
-      StatusCallback: input.statusCallbackUrl,
-      StatusCallbackEvents: '["terminal", "answered"]',
-      StatusCallbackContentType: "application/json",
-    };
+    const hasFlowOrStream = Boolean(input.flowUrl || input.streamUrl);
+    const body: Record<string, string> = hasFlowOrStream
+      ? {
+          // Single-leg AI call: From = customer, CallerId = ExoPhone
+          From: normalizeExotelPhone(input.to),
+          CallerId: normalizeExotelPhone(input.from),
+          CallType: "trans",
+          StatusCallback: input.statusCallbackUrl,
+          StatusCallbackEvents: '["terminal", "answered"]',
+          StatusCallbackContentType: "application/json",
+        }
+      : {
+          From: normalizeExotelPhone(input.from),
+          To: normalizeExotelPhone(input.to),
+          CallerId: normalizeExotelPhone(input.from),
+          StatusCallback: input.statusCallbackUrl,
+          StatusCallbackEvents: '["terminal", "answered"]',
+          StatusCallbackContentType: "application/json",
+        };
 
     const customField = input.customField ?? input.customParameters?.callId;
     if (customField) {
@@ -36,13 +64,11 @@ export class ExotelCallService implements TelephonyProvider {
       body.StreamUrl = input.streamUrl.replace(/^http/i, "ws");
       body.StreamType = "bidirectional";
     }
-    if (input.record) {
+    if (input.record === true) {
       body.Record = "true";
     }
-    if (input.timeoutSeconds) {
-      // Keep the ringing timeout and the answered-call billing cap separate.
-      body.TimeLimit = String(input.timeoutSeconds);
-    }
+    // Keep the answered-call billing cap server-controlled.
+    body.TimeLimit = String(exotelCallLimitSeconds(input.timeoutSeconds));
 
     const response = await this.client.request<ExotelCallResource>(
       "POST",

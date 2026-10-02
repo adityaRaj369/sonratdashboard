@@ -80,23 +80,20 @@ export class GeminiLiveSession implements AiSession {
                 },
             ]
             : undefined,
-        // The Live API default end-of-speech window is conservative and feels
-        // slow on narrowband phone audio. Keep a short natural pause while
-        // allowing the agent to answer promptly.
+        // Aggressive low-latency configuration for real-time natural conversational flow:
+        // Short silence window allows the agent to answer immediately without awkward pauses.
         realtimeInputConfig: {
           automaticActivityDetection: {
             startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
             endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-            prefixPaddingMs: 80,
-            silenceDurationMs: 450,
+            prefixPaddingMs: 20,
+            silenceDurationMs: 200,
           },
           activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
         },
-        // This is a live sales conversation, not a long-form reasoning task.
-        // Gemini 2.5 thinking is enabled by default and adds response delay.
-        thinkingConfig: this.model.includes("2.5")
-          ? { thinkingBudget: 0 }
-          : { thinkingLevel: "minimal" },
+        ...(this.model.includes("2.5") || this.model.includes("3")
+          ? { thinkingConfig: { thinkingBudget: 0 } }
+          : {}),
         speechConfig: this.params.voiceId
           ? {
               voiceConfig: {
@@ -220,18 +217,13 @@ export class GeminiLiveSession implements AiSession {
   }
 
   async sendAudio(chunk: Buffer): Promise<void> {
-    if (!this.liveSession || this.closed) return;
-    this.audioBuffer = Buffer.concat([this.audioBuffer, chunk]);
-    while (this.audioBuffer.length >= this.audioBatchBytes) {
-      const batch = this.audioBuffer.subarray(0, this.audioBatchBytes);
-      this.audioBuffer = this.audioBuffer.subarray(this.audioBatchBytes);
-      await this.liveSession.sendRealtimeInput?.({
-        audio: {
-          data: batch.toString("base64"),
-          mimeType: "audio/pcm;rate=16000",
-        },
-      });
-    }
+    if (!this.liveSession || this.closed || chunk.length === 0) return;
+    await this.liveSession.sendRealtimeInput?.({
+      audio: {
+        data: chunk.toString("base64"),
+        mimeType: "audio/pcm;rate=16000",
+      },
+    });
   }
 
   async sendText(text: string): Promise<void> {
