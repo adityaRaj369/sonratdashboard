@@ -27,10 +27,10 @@ export interface TelephonyClient {
 }
 
 function exotelCallLimitSeconds(requested?: number): number {
-  const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 60);
+  const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 600);
   const hardLimit = Number.isFinite(configured)
-    ? Math.min(Math.max(Math.floor(configured), 30), 600)
-    : 60;
+    ? Math.min(Math.max(Math.floor(configured), 30), 1800)
+    : 600;
   const requestedLimit = Number.isFinite(requested) ? Math.floor(requested as number) : hardLimit;
   return Math.min(Math.max(requestedLimit, 30), hardLimit);
 }
