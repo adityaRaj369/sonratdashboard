@@ -53,3 +53,63 @@ export async function fetchCallSessionBootstrap(
   }
   return data;
 }
+
+export async function transitionCall(
+  callId: string,
+  to: string,
+  reason: string,
+  payload?: Record<string, unknown>,
+): Promise<void> {
+  const config = getVoiceConfig();
+  const url = `${config.apiInternalBaseUrl.replace(/\/$/, "")}/voice/calls/${encodeURIComponent(callId)}/transition`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.AUTH_SECRET}`,
+    },
+    body: JSON.stringify({ to, reason, payload }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    log.warn(
+      { callId, to, status: res.status, text: text.slice(0, 200) },
+      "call transition failed",
+    );
+  }
+}
+
+export async function recordConversationMessage(input: {
+  callId: string;
+  role: "user" | "assistant" | "tool" | "system";
+  content: string;
+  language?: string;
+  toolCallId?: string;
+}): Promise<void> {
+  const config = getVoiceConfig();
+  const url = `${config.apiInternalBaseUrl.replace(/\/$/, "")}/voice/calls/${encodeURIComponent(input.callId)}/messages`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.AUTH_SECRET}`,
+    },
+    body: JSON.stringify({
+      role: input.role,
+      content: input.content,
+      language: input.language,
+      toolCallId: input.toolCallId,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    log.warn(
+      { callId: input.callId, status: res.status, text: text.slice(0, 200) },
+      "conversation message write failed",
+    );
+  }
+}

@@ -167,12 +167,12 @@ export class CallService {
 
     const telephony = createTelephonyProvider();
     const streaming = createExotelStreamingService();
+    const voiceBase = (config.EXOTEL_WEBHOOK_BASE_URL || config.VOICE_RUNTIME_URL).replace(/\/$/, "");
     const result = await telephony.placeOutboundCall({
       from: phone.e164,
       to: contact.normalizedPhone,
       statusCallbackUrl: streaming.buildStatusCallbackUrl(call.id),
-      streamUrl: `${getConfig().VOICE_RUNTIME_URL.replace(/^http/i, "ws")}/ws/exotel?callId=${encodeURIComponent(call.id)}`,
-      flowUrl: getConfig().EXOTEL_FLOW_URL,
+      streamUrl: `${voiceBase.replace(/^http/i, "ws")}/ws/exotel?callId=${encodeURIComponent(call.id)}`,
       customField: call.id,
       record: false,
     });

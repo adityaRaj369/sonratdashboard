@@ -1,19 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
   Bot,
-  GitBranch,
-  Headset,
   Megaphone,
-  MessageCircle,
-  Settings,
   UserCog,
 } from "lucide-react";
 import { SERVICE_SUBPAGES } from "./serviceSubpages";
 
 /**
- * Product modules for company dashboards:
- * Agents (train) → Support / Sales / WhatsApp (use agents)
+ * Product modules enabled in the production dashboard shell.
  */
 export interface ServiceDefinition {
   key: string;
@@ -38,26 +32,6 @@ const services: ServiceDefinition[] = [
     subpages: SERVICE_SUBPAGES.agents,
   },
   {
-    key: "flows",
-    title: "Flows",
-    route: "/flows",
-    icon: GitBranch,
-    description: "Conversation graphs for agents",
-    permission: "agents.show_menu",
-    group: "Workspace",
-    subpages: SERVICE_SUBPAGES.flows,
-  },
-  {
-    key: "customer-support",
-    title: "Customer Support",
-    route: "/support",
-    icon: Headset,
-    description: "Inbound support calls and conversations",
-    permission: "calls.show_menu",
-    group: "Workspace",
-    subpages: SERVICE_SUBPAGES["customer-support"],
-  },
-  {
     key: "sales",
     title: "Sales",
     route: "/sales",
@@ -68,41 +42,11 @@ const services: ServiceDefinition[] = [
     subpages: SERVICE_SUBPAGES.sales,
   },
   {
-    key: "whatsapp",
-    title: "WhatsApp",
-    route: "/whatsapp",
-    icon: MessageCircle,
-    description: "Connect WhatsApp and map a trained agent",
-    permission: "agents.show_menu",
-    group: "Workspace",
-    subpages: SERVICE_SUBPAGES.whatsapp,
-  },
-  {
-    key: "analytics",
-    title: "Analytics",
-    route: "/analytics",
-    icon: BarChart3,
-    description: "Performance charts and outcomes",
-    permission: "analytics.show_menu",
-    group: "Workspace",
-    subpages: SERVICE_SUBPAGES.analytics,
-  },
-  {
-    key: "settings",
-    title: "Settings",
-    route: "/settings",
-    icon: Settings,
-    description: "Org, phones, members, environment",
-    permission: "settings.show_menu",
-    group: "Administration",
-    subpages: SERVICE_SUBPAGES.settings,
-  },
-  {
     key: "admin-console",
     title: "Admin Console",
     route: "/admin",
     icon: UserCog,
-    description: "Users, roles, ACL, taxonomy, audit",
+    description: "Manage roles, permissions, and organization access",
     permission: "adminconsole.show_menu",
     group: "Administration",
     subpages: SERVICE_SUBPAGES["admin-console"],

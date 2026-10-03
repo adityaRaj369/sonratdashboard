@@ -21,6 +21,16 @@ export function useCalls(params?: {
   return useQuery({
     queryKey: callKeys.list(params),
     queryFn: () => callsApi.list(params),
+    refetchInterval: (query) => {
+      const anyActive = query.state.data?.items?.some(
+        (c: { status?: string }) =>
+          c.status === "AI_ACTIVE" ||
+          c.status === "RINGING" ||
+          c.status === "IN_PROGRESS" ||
+          c.status === "QUEUED",
+      );
+      return anyActive ? 2500 : false;
+    },
   });
 }
 
@@ -29,6 +39,12 @@ export function useCall(id: string) {
     queryKey: callKeys.detail(id),
     queryFn: () => callsApi.get(id),
     enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "AI_ACTIVE" || status === "RINGING" || status === "IN_PROGRESS" || status === "QUEUED"
+        ? 2000
+        : false;
+    },
   });
 }
 
@@ -37,6 +53,7 @@ export function useCallTranscript(id: string) {
     queryKey: callKeys.transcript(id),
     queryFn: () => callsApi.transcript(id),
     enabled: Boolean(id),
+    refetchInterval: 2500,
   });
 }
 

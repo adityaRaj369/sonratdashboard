@@ -10,8 +10,6 @@ import {
   ChevronDown,
   Bot,
   Megaphone,
-  PhoneCall,
-  BarChart3,
   Layers,
   History,
   Printer,
@@ -87,11 +85,7 @@ type PermissionGroup = {
 
 const SCREENS: ScreenDef[] = [
   { id: "agents", name: "Agents", icon: Bot, category: "Roles Management" },
-  { id: "campaigns", name: "Campaigns", icon: Megaphone, category: "Roles Management" },
-  { id: "contacts", name: "Contacts", icon: Users, category: "Roles Management" },
-  { id: "calls", name: "Calls", icon: PhoneCall, category: "Roles Management" },
-  { id: "analytics", name: "Analytics", icon: BarChart3, category: "Roles Management" },
-  { id: "settings", name: "Settings", icon: Settings, category: "Roles Management" },
+  { id: "campaigns", name: "Sales", icon: Megaphone, category: "Roles Management" },
   { id: "admin-console", name: "Admin Console", icon: Shield, category: "Roles Management" },
   { id: "user-assignments", name: "Role & User Management", icon: UserCheck, category: "Dashboard User Management" },
   { id: "role-manager", name: "Manage Role", icon: Users, category: "Dashboard User Management" },
@@ -102,10 +96,6 @@ const SCREENS: ScreenDef[] = [
 const DEMO_ADMIN_SCREEN_IDS = new Set([
   "agents",
   "campaigns",
-  "contacts",
-  "calls",
-  "analytics",
-  "settings",
   "admin-console",
   "user-assignments",
   "role-manager",
@@ -161,48 +151,6 @@ const PERMISSION_LAYOUT: Record<string, PermissionGroup[]> = {
         { label: "Start", actionType: "start", permissionKey: "campaigns.start" },
         { label: "Pause", actionType: "pause", permissionKey: "campaigns.pause" },
       ],
-    },
-  ],
-  contacts: [
-    {
-      group: "Contacts Page",
-      icon: Users,
-      togglePermissionKey: "contacts.show_menu",
-      actions: [],
-    },
-    {
-      group: "Contacts",
-      togglePermissionKey: "contacts.read",
-      actions: [
-        { label: "Create", actionType: "create", permissionKey: "contacts.create" },
-        { label: "Edit", actionType: "edit", permissionKey: "contacts.edit" },
-        { label: "Delete", actionType: "delete", permissionKey: "contacts.delete" },
-        { label: "Write", actionType: "write", permissionKey: "contacts.write" },
-      ],
-    },
-  ],
-  calls: [
-    {
-      group: "Calls",
-      icon: PhoneCall,
-      togglePermissionKey: "calls.show_menu",
-      actions: [{ label: "Read", actionType: "read", permissionKey: "calls.read" }],
-    },
-  ],
-  analytics: [
-    {
-      group: "Analytics",
-      icon: BarChart3,
-      togglePermissionKey: "analytics.show_menu",
-      actions: [{ label: "Read", actionType: "read", permissionKey: "analytics.read" }],
-    },
-  ],
-  settings: [
-    {
-      group: "Settings",
-      icon: Settings,
-      togglePermissionKey: "settings.show_menu",
-      actions: [{ label: "Write", actionType: "write", permissionKey: "settings.write" }],
     },
   ],
   "admin-console": [

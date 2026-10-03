@@ -13,12 +13,45 @@ import { AuditService } from "./audit.service.js";
 import { AgentService } from "./agent.service.js";
 import { getConfig } from "@sonrat/config";
 
-async function isVoiceRuntimeReady(baseUrl: string) {
+function isLocalUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    return ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function isVoiceRuntimeReady(config = getConfig()) {
+  const publicBase = config.EXOTEL_WEBHOOK_BASE_URL || config.VOICE_RUNTIME_URL;
+
+  if (!config.MOCK_TELEPHONY && config.TELEPHONY_PROVIDER === "exotel") {
+    if (!publicBase || isLocalUrl(publicBase)) return false;
+    try {
+      const response = await fetch(`${publicBase.replace(/\/$/, "")}/health`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  const baseUrl = config.VOICE_RUNTIME_URL;
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`, {
       signal: AbortSignal.timeout(3000),
     });
-    return response.ok;
+    if (response.ok) return true;
+  } catch {
+    // try local fallback
+  }
+  try {
+    const local = await fetch("http://localhost:4100/health", {
+      signal: AbortSignal.timeout(1500),
+    });
+    return local.ok;
   } catch {
     return false;
   }
@@ -73,9 +106,23 @@ export class CampaignService {
   async preflight(organizationId: string, campaignId: string) {
     const campaign = await this.get(organizationId, campaignId);
     const config = getConfig();
-    const agentReady = Boolean(
+    const agentService = new AgentService();
+    let agentReady = Boolean(
       campaign.agent?.activeVersionId && campaign.agent.status === "PUBLISHED",
     );
+    let agentMessage = agentReady ? "Ready" : "Publish the selected agent";
+    if (!agentReady && campaign.agent) {
+      const validation = agentService.validateConfig(campaign.agent.draftConfig);
+      if (validation.valid) {
+        agentReady = true;
+        agentMessage = "Ready (Auto-publishes on launch)";
+      } else {
+        agentMessage = "Selected agent configuration has errors; please review and publish";
+      }
+    } else if (!campaign.agent) {
+      agentMessage = "Select an agent for this campaign";
+    }
+
     const phoneReady = Boolean(
       campaign.phoneNumber?.isActive || getConfig().EXOTEL_PHONE_NUMBER,
     );
@@ -94,9 +141,9 @@ export class CampaignService {
             config.EXOTEL_ACCOUNT_SID,
         ));
     const voiceRuntimeReady =
-      config.MOCK_TELEPHONY || (await isVoiceRuntimeReady(config.VOICE_RUNTIME_URL));
+      config.MOCK_TELEPHONY || (await isVoiceRuntimeReady(config));
     const checks = [
-      { id: "agent", label: "Published agent", ready: agentReady, message: agentReady ? "Ready" : "Publish the selected agent" },
+      { id: "agent", label: "Published agent", ready: agentReady, message: agentMessage },
       { id: "phone", label: "Caller number", ready: phoneReady, message: phoneReady ? "Ready" : "Configure an active Exotel number" },
       { id: "contacts", label: "Callable contacts", ready: contactCount > 0, message: contactCount > 0 ? `${contactCount} callable contact${contactCount === 1 ? "" : "s"}` : "Add at least one callable contact" },
       { id: "provider", label: "Telephony provider", ready: providerReady, message: providerReady ? "Configured" : "Configure Exotel credentials" },
@@ -171,10 +218,7 @@ export class CampaignService {
   }
 
   async update(organizationId: string, userId: string, campaignId: string, input: unknown) {
-    const campaign = await this.get(organizationId, campaignId);
-    if (campaign.status === "RUNNING") {
-      throw new ConflictError("Cannot update a running campaign; pause first");
-    }
+    await this.get(organizationId, campaignId);
 
     const schema = createCampaignSchema.partial().omit({ contactIds: true });
     const data = schema.parse(input);
@@ -206,6 +250,16 @@ export class CampaignService {
       throw new ConflictError(`Cannot start campaign in status ${campaign.status}`);
     }
 
+    // If agent is not published yet, attempt to auto-publish if valid
+    if (campaign.agent && (!campaign.agent.activeVersionId || campaign.agent.status !== "PUBLISHED")) {
+      try {
+        const agentSvc = new AgentService();
+        await agentSvc.publish(organizationId, userId, campaign.agentId);
+      } catch {
+        // If validation fails, preflight below will report it cleanly
+      }
+    }
+
     // Never spend telephony credits unless the public AI WebSocket endpoint is live.
     const preflight = await this.preflight(organizationId, campaignId);
     if (!preflight.ready) {
@@ -216,49 +270,38 @@ export class CampaignService {
       throw new ValidationError(`Campaign is not ready to start. ${failed}`);
     }
 
-    // When resuming from PAUSED or restarting from COMPLETED:
-    if (campaign.status === "COMPLETED") {
-      // Full restart: reset all contacts so they can be dialed again
+    // Always release any stuck INITIATING or scheduled retry contacts back to QUEUED
+    await db.campaignContact.updateMany({
+      where: {
+        campaignId,
+        status: { in: ["INITIATING", "RETRY_SCHEDULED"] },
+      },
+      data: {
+        status: "QUEUED",
+        nextAttemptAt: null,
+      },
+    });
+
+    // If campaign is COMPLETED or all contacts have been attempted/failed, reset all non-connected contacts
+    const readyCount = await db.campaignContact.count({
+      where: {
+        campaignId,
+        status: "QUEUED",
+      },
+    });
+
+    if (campaign.status === "COMPLETED" || readyCount === 0) {
       await db.campaignContact.updateMany({
-        where: { campaignId },
+        where: {
+          campaignId,
+          status: { notIn: ["CONNECTED"] },
+        },
         data: {
           status: "QUEUED",
           attemptCount: 0,
           nextAttemptAt: null,
-          lastCallId: null,
         },
       });
-    } else if (campaign.status === "PAUSED") {
-      const pendingCount = await db.campaignContact.count({
-        where: {
-          campaignId,
-          status: { in: ["QUEUED", "RETRY_SCHEDULED"] },
-        },
-      });
-
-      if (pendingCount === 0) {
-        await db.campaignContact.updateMany({
-          where: {
-            campaignId,
-            status: { notIn: ["CONNECTED"] },
-          },
-          data: {
-            status: "QUEUED",
-            nextAttemptAt: null,
-          },
-        });
-      } else {
-        await db.campaignContact.updateMany({
-          where: {
-            campaignId,
-            status: "RETRY_SCHEDULED",
-          },
-          data: {
-            status: "QUEUED",
-            nextAttemptAt: null,
-          },
-        });
-      }
     }
 
     const agent = await db.agent.findFirst({
@@ -454,6 +497,42 @@ export class CampaignService {
     });
 
     return { added: valid.length };
+  }
+
+  async removeContact(
+    organizationId: string,
+    userId: string,
+    campaignId: string,
+    contactId: string,
+  ) {
+    const campaign = await this.get(organizationId, campaignId);
+    if (campaign.status === "RUNNING") {
+      throw new ConflictError("Pause campaign before removing contacts");
+    }
+
+    const existing = await db.campaignContact.findFirst({
+      where: { campaignId, contactId },
+    });
+    if (!existing) return { removed: 0 };
+
+    if (["INITIATING", "RINGING", "CONNECTED", "AI_ACTIVE"].includes(existing.status)) {
+      throw new ConflictError("Cannot remove a contact with an active or connected call");
+    }
+
+    await db.campaignContact.delete({
+      where: { id: existing.id },
+    });
+
+    await this.audit.log({
+      organizationId,
+      actorUserId: userId,
+      action: "campaign.remove_contact",
+      resource: "campaign",
+      resourceId: campaignId,
+      metadata: { contactId },
+    });
+
+    return { removed: 1 };
   }
 
   async listContacts(

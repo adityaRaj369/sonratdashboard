@@ -19,6 +19,7 @@ import {
   base64ToBuffer,
   bufferToBase64,
 } from "../audio/formats.js";
+import { recordConversationMessage } from "../lib/api-client.js";
 
 export type CallSessionStatus =
   | "created"
@@ -202,9 +203,9 @@ export class CallSession {
     // Active instant barge-in detection: if the AI is actively talking and caller starts speaking
     if (this.isAiSpeaking) {
       const rms = this.calculateRmsPcm16(forAi);
-      if (rms > 2400) {
+      if (rms > 6500) {
         this.consecutiveSpeechFrames += 1;
-        if (this.consecutiveSpeechFrames >= 2) {
+        if (this.consecutiveSpeechFrames >= 4) {
           this.consecutiveSpeechFrames = 0;
           this.log.info({ rms }, "caller voice barge-in detected, cutting off AI audio");
           await this.handleBargeIn();
@@ -222,13 +223,15 @@ export class CallSession {
     );
   }
 
-  async handleBargeIn(): Promise<void> {
+  async handleBargeIn(notifyAi = true): Promise<void> {
     this.isAiSpeaking = false;
     this.consecutiveSpeechFrames = 0;
     if (this.speakingTimeout) clearTimeout(this.speakingTimeout);
     const gen = this.pipeline.handleBargeIn();
     this.status = "interrupted";
-    await this.ai?.interrupt();
+    if (notifyAi) {
+      await this.ai?.interrupt();
+    }
     this.log.info({ generation: gen }, "barge-in completed, audio cleared");
     // Allow new AI audio shortly after
     this.pipeline.resumeAfterBargeIn();
@@ -290,6 +293,14 @@ export class CallSession {
                 text: event.text,
                 language: event.language,
                 at: new Date().toISOString(),
+              });
+              void recordConversationMessage({
+                callId: this.context.callId,
+                role: event.role,
+                content: event.text,
+                language: event.language,
+              }).catch((err) => {
+                this.log.warn({ err }, "failed to persist conversation message");
               });
             }
             await this.events.emit(
@@ -366,7 +377,7 @@ export class CallSession {
           }
           case "interrupted": {
             this.log.info("Gemini Live interrupted event received from model");
-            await this.handleBargeIn();
+            await this.handleBargeIn(false);
             break;
           }
           case "error": {

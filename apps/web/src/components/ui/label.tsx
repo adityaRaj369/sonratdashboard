@@ -8,7 +8,7 @@ export function Label({
   return (
     <label
       className={cn(
-        "mb-1.5 block text-xs font-medium text-muted-foreground",
+        "mb-1.5 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500",
         className,
       )}
       {...props}
@@ -30,10 +30,10 @@ export function Field({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1", className)}>
+    <div className={cn("space-y-1.5", className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-xs font-semibold text-rose-600">{error}</p> : null}
     </div>
   );
 }

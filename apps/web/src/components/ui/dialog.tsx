@@ -48,17 +48,17 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby="dialog-title"
         className={cn(
-          "relative z-10 w-full max-w-lg rounded-lg border border-border bg-card shadow-soft",
+          "relative z-10 w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-soft",
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <h2 id="dialog-title" className="font-display text-base font-semibold">
+            <h2 id="dialog-title" className="text-base font-semibold">
               {title}
             </h2>
             {description ? (
-              <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+              <p className="mt-0.5 text-sm text-slate-500">{description}</p>
             ) : null}
           </div>
           <Button
@@ -72,7 +72,7 @@ export function Dialog({
         </div>
         <div className="px-4 py-4">{children}</div>
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+          <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
             {footer}
           </div>
         ) : null}

@@ -26,13 +26,18 @@ export interface TelephonyClient {
   hangup(providerCallId: string): Promise<void>;
 }
 
-function exotelCallLimitSeconds(requested?: number): number {
+function exotelMaxCallDurationSeconds(requested?: number): number {
   const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 600);
   const hardLimit = Number.isFinite(configured)
     ? Math.min(Math.max(Math.floor(configured), 30), 1800)
     : 600;
   const requestedLimit = Number.isFinite(requested) ? Math.floor(requested as number) : hardLimit;
-  return Math.min(Math.max(requestedLimit, 30), hardLimit);
+  return Math.min(Math.max(requestedLimit, 120), hardLimit);
+}
+
+function exotelRingTimeoutSeconds(requested?: number): number {
+  const value = Number.isFinite(requested) ? Math.floor(requested as number) : 45;
+  return Math.min(Math.max(value, 20), 60);
 }
 
 export class MockExotelClient implements TelephonyClient {
@@ -88,11 +93,13 @@ export class ExotelClient implements TelephonyClient {
     // Connect-to-Flow: From = customer, CallerId = ExoPhone, Url = flow
     // Do NOT send `To` together with `Url` — that triggers Exotel's
     // "number not properly setup / App Bazaar" prompt.
-    const flowUrl = req.flowUrl || this.opts.flowUrl;
+    const flowUrl = req.flowUrl || (!req.streamUrl ? this.opts.flowUrl : undefined);
+    const callerIdNumber = process.env.EXOTEL_PHONE_NUMBER || req.from;
     const params: Record<string, string> = {
       From: normalizeExotelPhone(req.to),
-      CallerId: normalizeExotelPhone(req.from),
+      CallerId: normalizeExotelPhone(callerIdNumber),
       CallType: "trans",
+      Record: "false",
     };
 
     if (flowUrl) {
@@ -113,17 +120,10 @@ export class ExotelClient implements TelephonyClient {
     if (req.statusCallbackUrl) {
       params.StatusCallback = req.statusCallbackUrl;
     }
-    if (req.timeoutSeconds) {
-      // TimeOut only controls unanswered ringing. TimeLimit is the hard cap
-      // for an answered call; without it a live AI call can bill indefinitely.
-      const callLimitSeconds = exotelCallLimitSeconds(req.timeoutSeconds);
-      params.TimeOut = String(Math.min(callLimitSeconds, 60));
-      params.TimeLimit = String(callLimitSeconds);
-    } else {
-      // Always send a billing cap, even when an older campaign has no timeout.
-      params.TimeOut = "60";
-      params.TimeLimit = String(exotelCallLimitSeconds());
-    }
+    // TimeOut controls ringing only. TimeLimit is the answered-call hard cap.
+    // Keep them separate so a 30s ring timeout never cuts a live AI call.
+    params.TimeOut = String(exotelRingTimeoutSeconds());
+    params.TimeLimit = String(exotelMaxCallDurationSeconds(req.timeoutSeconds));
     if (req.customParameters?.callId) {
       // Exotel CustomField is free-form; keep it a bare call UUID (no & pairs —
       // those get mangled into custom_parameters on some trial accounts).
@@ -135,6 +135,7 @@ export class ExotelClient implements TelephonyClient {
         from: params.From,
         callerId: params.CallerId,
         hasUrl: Boolean(params.Url),
+        hasStreamUrl: Boolean(params.StreamUrl),
         flowUrl: params.Url,
       },
       "exotel place call request",

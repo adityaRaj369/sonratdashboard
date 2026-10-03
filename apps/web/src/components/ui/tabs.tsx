@@ -45,7 +45,7 @@ export function TabsList({
     <div
       role="tablist"
       className={cn(
-        "inline-flex h-9 items-center gap-1 rounded-md border border-border bg-muted/50 p-1",
+        "inline-flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-slate-100/50 p-1",
         className,
       )}
       {...props}
@@ -71,8 +71,8 @@ export function TabsTrigger({
       role="tab"
       aria-selected={active}
       className={cn(
-        "inline-flex h-7 items-center rounded px-2.5 text-sm font-medium text-muted-foreground transition-colors focus-ring",
-        active && "bg-card text-foreground shadow-sm",
+        "inline-flex h-7 items-center rounded px-2.5 text-sm font-medium text-slate-500 transition-colors focus-ring",
+        active && "bg-white text-slate-900 shadow-sm",
         className,
       )}
       onClick={() => ctx.setValue(value)}

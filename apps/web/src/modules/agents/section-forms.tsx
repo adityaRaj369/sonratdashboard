@@ -77,14 +77,14 @@ function StringListEditor({
           {value.map((item, idx) => (
             <li
               key={`${item}-${idx}`}
-              className="flex items-center justify-between rounded-lg border border-border bg-card/60 px-3 py-2 text-xs shadow-xs transition-colors hover:border-primary/30"
+              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-xs shadow-xs transition-colors hover:border-slate-300"
             >
-              <span className="flex-1 font-medium text-foreground">{item}</span>
+              <span className="flex-1 font-medium text-slate-900">{item}</span>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                className="h-6 w-6 p-0 text-slate-500 hover:text-rose-600 shrink-0 ml-2"
                 onClick={() => onChange(value.filter((_, i) => i !== idx))}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -117,7 +117,7 @@ function SectionFormShell({
       }}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-slate-500">
           {dirty ? "Unsaved changes" : "All changes saved"}
         </p>
         <Button type="submit" loading={saving} disabled={!dirty}>
@@ -199,7 +199,7 @@ export function GeneralSection({ agentId, initialData }: SectionProps) {
                 </option>
               ))}
           </Select>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-slate-500">
             Publish a flow under Agents → Flows, then attach it here.
           </p>
         </Field>
@@ -726,27 +726,27 @@ export function SalesSection(props: SectionProps) {
     >
       <div className="space-y-6">
         {/* Playbook Overview Header */}
-        <div className="rounded-xl border border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
+        <div className="rounded-lg border border-slate-200 bg-gradient-to-r from-slate-100 via-white to-transparent p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-semibold text-foreground">
+                <Target className="h-5 w-5 text-slate-700" />
+                <h3 className="text-base font-semibold text-slate-900">
                   Sales & Outbound Playbook
                 </h3>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground max-w-xl">
+              <p className="mt-1 text-xs text-slate-500 max-w-xl">
                 Configure your AI agent&apos;s pitch strategy, qualification criteria, offer catalog, and objection-handling playbook for outbound sales calls.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
                 {values.qualificationQuestions.length} Qualification Qs
               </span>
-              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
                 {values.offers.length} Offers
               </span>
-              <span className="rounded-md border border-border bg-background px-2.5 py-1 font-medium">
+              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
                 {values.objectionHandling.length} Objection Handlers
               </span>
             </div>
@@ -754,19 +754,19 @@ export function SalesSection(props: SectionProps) {
         </div>
 
         {/* Card 1: Core Strategy & Closing */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
-          <div className="border-b border-border pb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="border-b border-slate-200 pb-3">
+            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-slate-700" />
               Core Strategy & Closing
             </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Define the primary conversion goal and the exact closing behavior.
             </p>
           </div>
 
           <Field label="Primary objective *">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               The #1 outcome of the call (e.g. Schedule a demo, close a trial, qualify interest)
             </p>
             <Input
@@ -780,7 +780,7 @@ export function SalesSection(props: SectionProps) {
           </Field>
 
           <Field label="Secondary objectives">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               Additional milestones if primary objective is met or blocked
             </p>
             <StringListEditor
@@ -794,7 +794,7 @@ export function SalesSection(props: SectionProps) {
           </Field>
 
           <Field label="Closing behavior">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               How the agent should secure commitment and wrap up the call
             </p>
             <Textarea
@@ -810,19 +810,19 @@ export function SalesSection(props: SectionProps) {
         </div>
 
         {/* Card 2: Discovery & Qualification Scripting */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
-          <div className="border-b border-border pb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <HelpCircle className="h-4 w-4 text-primary" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="border-b border-slate-200 pb-3">
+            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-slate-700" />
               Discovery & Qualification Scripting
             </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Questions the AI will ask to qualify prospects and uncover pain points.
             </p>
           </div>
 
           <Field label="Qualification questions">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               Questions to verify if the prospect fits your ideal customer profile
             </p>
             <StringListEditor
@@ -836,7 +836,7 @@ export function SalesSection(props: SectionProps) {
           </Field>
 
           <Field label="Discovery questions">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               Probing questions to uncover bottlenecks and urgency
             </p>
             <StringListEditor
@@ -850,7 +850,7 @@ export function SalesSection(props: SectionProps) {
           </Field>
 
           <Field label="Lead qualification rules">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               Rules that mark a contact as an active qualified lead
             </p>
             <StringListEditor
@@ -865,19 +865,19 @@ export function SalesSection(props: SectionProps) {
         </div>
 
         {/* Card 3: Offers & Promotions */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
-          <div className="border-b border-border pb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Tag className="h-4 w-4 text-primary" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="border-b border-slate-200 pb-3">
+            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-slate-700" />
               Offers, Pricing & Value Propositions
             </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Packages, discounts, and hooks the agent can pitch to incentivize action.
             </p>
           </div>
 
           <Field label="Active offers & incentives">
-            <p className="text-[11px] text-muted-foreground mb-1">
+            <p className="text-[11px] text-slate-500 mb-1">
               Promotions the AI can offer to hesitant prospects
             </p>
             <StringListEditor
@@ -892,15 +892,15 @@ export function SalesSection(props: SectionProps) {
         </div>
 
         {/* Card 4: Objection Handling Matrix */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4">
-          <div className="border-b border-border pb-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="border-b border-slate-200 pb-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-primary" />
+                <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-slate-700" />
                   Objection Handling Matrix
                 </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Train the agent how to counter pushback with winning responses.
                 </p>
               </div>
@@ -909,7 +909,7 @@ export function SalesSection(props: SectionProps) {
 
           {/* Quick preset chips */}
           <div>
-            <span className="text-[11px] font-medium text-muted-foreground block mb-1.5">
+            <span className="text-[11px] font-medium text-slate-500 block mb-1.5">
               Quick-add common objection handlers:
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -918,9 +918,9 @@ export function SalesSection(props: SectionProps) {
                   key={preset.title}
                   type="button"
                   onClick={() => addObjection(preset.trigger, preset.response)}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-secondary hover:border-primary/40 cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-900 transition-colors hover:bg-slate-100 hover:border-slate-300 cursor-pointer"
                 >
-                  <Plus className="h-3 w-3 text-primary" />
+                  <Plus className="h-3 w-3 text-slate-700" />
                   {preset.title}
                 </button>
               ))}
@@ -928,13 +928,13 @@ export function SalesSection(props: SectionProps) {
           </div>
 
           {/* Custom Objection Input Builder */}
-          <div className="rounded-lg border border-border bg-muted/30 p-3 sm:p-4 space-y-3">
-            <span className="text-xs font-semibold text-foreground">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:p-4 space-y-3">
+            <span className="text-xs font-semibold text-slate-900">
               Add custom objection handler
             </span>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">
                   When prospect says:
                 </label>
                 <Input
@@ -945,7 +945,7 @@ export function SalesSection(props: SectionProps) {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">
                   Agent pitch / counter-argument:
                 </label>
                 <Input
@@ -992,20 +992,20 @@ export function SalesSection(props: SectionProps) {
               return (
                 <div
                   key={`${item}-${idx}`}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:border-primary/30"
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-xs transition-colors hover:border-slate-300"
                 >
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+                      <span className="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
                         Prospect Objection
                       </span>
-                      <span className="text-xs font-medium text-foreground">
+                      <span className="text-xs font-medium text-slate-900">
                         &ldquo;{trigger}&rdquo;
                       </span>
                     </div>
                     <div className="flex items-start gap-1.5 pt-0.5">
-                      <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground leading-relaxed">
+                      <ArrowRight className="h-3.5 w-3.5 text-slate-700 shrink-0 mt-0.5" />
+                      <p className="text-xs text-slate-500 leading-relaxed">
                         {pitch}
                       </p>
                     </div>
@@ -1014,7 +1014,7 @@ export function SalesSection(props: SectionProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                    className="h-7 w-7 p-0 text-slate-500 hover:text-rose-600 shrink-0"
                     onClick={() =>
                       setValues((prev) => ({
                         ...prev,
@@ -1030,7 +1030,7 @@ export function SalesSection(props: SectionProps) {
               );
             })}
             {!values.objectionHandling.length && (
-              <p className="text-xs text-muted-foreground italic text-center py-3">
+              <p className="text-xs text-slate-500 italic text-center py-3">
                 No objection handling rules configured yet. Click a preset above or add a custom rule.
               </p>
             )}
@@ -1262,7 +1262,7 @@ export function ToolsSection(props: SectionProps) {
           return (
             <label
               key={tool}
-              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
             >
               <input
                 type="checkbox"
@@ -1325,7 +1325,7 @@ export function ProductsSection({ agentId, initialData }: SectionProps) {
     >
       <div className="space-y-3">
         {products.map((product, idx) => (
-          <div key={idx} className="space-y-2 rounded-lg border border-border p-3">
+          <div key={idx} className="space-y-2 rounded-lg border border-slate-200 p-3">
             <Field label="Product name">
               <Input
                 value={product.name}
@@ -1482,11 +1482,11 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
         }
       }}
     >
-      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium">Company documents</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-500">
               Upload PDF / TXT / MD / CSV. Text is extracted into the live agent prompt on publish.
             </p>
           </div>
@@ -1516,11 +1516,11 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
             {values.documents.map((doc) => (
               <li
                 key={doc.id}
-                className="flex items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                className="flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{doc.fileName}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-slate-500">
                     {doc.extractedText
                       ? `${doc.extractedText.length} chars extracted`
                       : "No text extracted yet"}
@@ -1557,7 +1557,7 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
+          <p className="text-xs text-slate-500">No documents uploaded yet.</p>
         )}
       </div>
       <Field label="Policies">
@@ -1588,9 +1588,9 @@ export function KnowledgeSection({ agentId, initialData }: SectionProps) {
         />
       </Field>
       <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">FAQs</p>
+        <p className="text-xs font-medium text-slate-500">FAQs</p>
         {values.faqs.map((faq, idx) => (
-          <div key={idx} className="grid gap-2 rounded-md border border-border p-3 sm:grid-cols-2">
+          <div key={idx} className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-2">
             <Input
               placeholder="Question"
               value={faq.question}

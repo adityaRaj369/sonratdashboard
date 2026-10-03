@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { Plus } from "lucide-react";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { useWorkspaceState } from "@/hooks/workspace/useWorkspaceState";
 import useServiceSearch from "@/hooks/workspace/useServiceSearch";
@@ -13,6 +14,7 @@ import services, {
 import WorkspaceLayout from "@/layouts/WorkspaceLayout";
 import MainSidebar from "@/components/dashboard/MainSidebar";
 import WorkspaceHeaderLeft from "@/components/workspace/WorkspaceHeaderLeft";
+import WorkspaceHeaderRight from "@/components/workspace/WorkspaceHeaderRight";
 import ServiceBrowserDrawer from "@/components/workspace/ServiceBrowserDrawer";
 import ModuleSubnav from "@/components/workspace/ModuleSubnav";
 import ModuleRouter from "@/components/workspace/ModuleRouter";
@@ -119,6 +121,31 @@ function ShellInner() {
   };
 
   const sidebarOffset = collapsed ? 0 : 256;
+  const headerRight = useMemo(() => {
+    if (activeService?.key === "agents") {
+      const disabled = !can("agents.create") && !can("agents.write");
+      return (
+        <WorkspaceHeaderRight
+          actionLabel="Create Agent"
+          onAction={() => window.dispatchEvent(new CustomEvent("sonrat-open-create-agent"))}
+          disabled={disabled}
+          icon={Plus}
+        />
+      );
+    }
+    if (activeService?.key === "sales" || activeService?.key === "campaigns") {
+      const disabled = !can("campaigns.create") && !can("campaigns.write");
+      return (
+        <WorkspaceHeaderRight
+          actionLabel="Create Sale"
+          onAction={() => window.dispatchEvent(new CustomEvent("sonrat-open-create-sale"))}
+          disabled={disabled}
+          icon={Plus}
+        />
+      );
+    }
+    return null;
+  }, [activeService?.key, can]);
 
   return (
     <>
@@ -146,6 +173,7 @@ function ShellInner() {
           />
         }
         headerLeft={<WorkspaceHeaderLeft ref={headerRef} mode="date" />}
+        headerRight={headerRight}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
           <ModuleSubnav service={activeService} />

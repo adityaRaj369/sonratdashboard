@@ -24,9 +24,9 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
     idempotencyKey,
   } = job.data;
 
-  // Idempotency: existing call with same key
+  // Idempotency: existing call with same key (skip only if not failed)
   const existing = await db.call.findFirst({
-    where: { organizationId, idempotencyKey },
+    where: { organizationId, idempotencyKey, status: { notIn: ["FAILED", "CANCELLED"] } },
   });
   if (existing) {
     return { callId: existing.id, deduped: true };
@@ -87,8 +87,8 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
   }
 
   const fromNumber =
-    campaign.phoneNumber?.e164 ??
-    process.env.EXOTEL_PHONE_NUMBER;
+    process.env.EXOTEL_PHONE_NUMBER ||
+    campaign.phoneNumber?.e164;
   const toNumber = contact.normalizedPhone ?? contact.rawPhone;
   if (!fromNumber || !toNumber) {
     await db.campaignContact.updateMany({
@@ -140,7 +140,7 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
 
           const webhookBase =
             process.env.EXOTEL_WEBHOOK_BASE_URL || ctx.apiBaseUrl;
-          const voiceBase = ctx.voiceRuntimeUrl.replace(/\/$/, "");
+          const voiceBase = (process.env.EXOTEL_WEBHOOK_BASE_URL || ctx.voiceRuntimeUrl).replace(/\/$/, "");
           const streamUrl = `${voiceBase.replace(/^http/i, "ws")}/ws/exotel?callId=${encodeURIComponent(call.id)}`;
 
           let placed;
@@ -148,9 +148,8 @@ export const createOutboundCall: JobHandler<CreateOutboundCallData> = async (
             placed = await ctx.telephony.placeOutboundCall({
               from: fromNumber,
               to: toNumber,
-              flowUrl: process.env.EXOTEL_FLOW_URL,
               streamUrl,
-              statusCallbackUrl: `${webhookBase.replace(/\/$/, "")}/webhooks/exotel/call-status`,
+              statusCallbackUrl: `${webhookBase.replace(/\/$/, "")}/webhooks/exotel/call-status?callId=${encodeURIComponent(call.id)}`,
               customParameters: {
                 callId: call.id,
                 organizationId,

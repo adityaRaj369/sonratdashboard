@@ -7,6 +7,7 @@ export { Card, CardHeader, CardTitle, CardDescription, CardContent } from "./car
 export { Dialog } from "./dialog";
 export { Drawer } from "./drawer";
 export { Table, THead, TBody, TR, TH, TD } from "./table";
+export { Pagination } from "./pagination";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
 export { Skeleton, TableSkeleton } from "./skeleton";
 export { EmptyState } from "./empty-state";

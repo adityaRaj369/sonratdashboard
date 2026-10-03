@@ -25,6 +25,35 @@ const callInclude = {
   conversation: true,
 } as const;
 
+async function markCallAiActive(input: {
+  organizationId: string;
+  callId: string;
+  currentStatus: CallStatus;
+}) {
+  const sequence: CallStatus[] = [];
+  if (input.currentStatus === "QUEUED") {
+    sequence.push("INITIATING", "RINGING", "CONNECTED");
+  } else if (input.currentStatus === "INITIATING") {
+    sequence.push("RINGING", "CONNECTED");
+  } else if (input.currentStatus === "RINGING") {
+    sequence.push("CONNECTED");
+  }
+
+  for (const to of [...sequence, "AI_ACTIVE" as CallStatus]) {
+    try {
+      await callState.transition({
+        organizationId: input.organizationId,
+        callId: input.callId,
+        to,
+        actor: "voice-runtime",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      if (!message.includes("Invalid call state transition")) throw err;
+    }
+  }
+}
+
 async function findCallByIdOrProvider(callId: string) {
   const where = UUID_RE.test(callId)
     ? { OR: [{ id: callId }, { providerCallId: callId }] }
@@ -162,16 +191,11 @@ voice.post(
       update: {},
     });
 
-    try {
-      await callState.transition({
-        organizationId: call.organizationId,
-        callId: call.id,
-        to: "AI_ACTIVE",
-        actor: "voice-runtime",
-      });
-    } catch {
-      // may already be AI_ACTIVE
-    }
+    await markCallAiActive({
+      organizationId: call.organizationId,
+      callId: call.id,
+      currentStatus: call.status as CallStatus,
+    });
 
     return c.json({
       callSessionId: callSession.id,

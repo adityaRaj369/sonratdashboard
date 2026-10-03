@@ -7,7 +7,7 @@ export function Skeleton({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      className={cn("animate-pulse rounded-md bg-slate-100", className)}
       {...props}
     />
   );
@@ -15,7 +15,7 @@ export function Skeleton({
 
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
       <Skeleton className="h-8 w-full" />
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} className="h-10 w-full" />

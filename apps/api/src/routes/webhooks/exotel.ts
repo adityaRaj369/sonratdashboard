@@ -49,6 +49,81 @@ async function parsePayload(c: { req: { parseBody: () => Promise<Record<string, 
   return out;
 }
 
+async function parseRawWebhookBody(c: {
+  req: {
+    raw: Request;
+    parseBody: () => Promise<Record<string, unknown>>;
+    header: (n: string) => string | undefined;
+  };
+}) {
+  const contentType = c.req.header("content-type") ?? "";
+  const rawBody = await c.req.raw.clone().text();
+  const sig = c.req.header("x-exotel-signature");
+  if (!verifyExotelSignature(rawBody, sig)) {
+    return { ok: false as const, rawBody, raw: {} };
+  }
+
+  if (contentType.includes("application/json")) {
+    return { ok: true as const, rawBody, raw: JSON.parse(rawBody) as Record<string, unknown> };
+  }
+
+  if (contentType.includes("multipart/form-data")) {
+    const body = await c.req.parseBody();
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(body)) {
+      out[k] = typeof v === "string" ? v : String(v);
+    }
+    return { ok: true as const, rawBody, raw: out };
+  }
+
+  return {
+    ok: true as const,
+    rawBody,
+    raw: Object.fromEntries(new URLSearchParams(rawBody).entries()),
+  };
+}
+
+async function transitionCallFromProvider(input: {
+  call: { id: string; organizationId: string; status: string };
+  to: CallStatus;
+  actor: string;
+  payload: Record<string, unknown>;
+}) {
+  const current = input.call.status as CallStatus;
+  if (current === input.to) return;
+
+  const sequence: CallStatus[] = [];
+  if (input.to === "AI_ACTIVE") {
+    if (current === "QUEUED") sequence.push("INITIATING", "RINGING", "CONNECTED");
+    if (current === "INITIATING") sequence.push("RINGING", "CONNECTED");
+    if (current === "RINGING") sequence.push("CONNECTED");
+  }
+  if (input.to === "CONNECTED") {
+    if (current === "QUEUED") sequence.push("INITIATING", "RINGING");
+    if (current === "INITIATING") sequence.push("RINGING");
+  }
+  if (input.to === "COMPLETED") {
+    if (current === "QUEUED") sequence.push("INITIATING", "RINGING", "CONNECTED");
+    if (current === "INITIATING") sequence.push("RINGING", "CONNECTED");
+    if (current === "RINGING") sequence.push("CONNECTED");
+  }
+
+  for (const to of [...sequence, input.to]) {
+    try {
+      await callState.transition({
+        organizationId: input.call.organizationId,
+        callId: input.call.id,
+        to,
+        actor: input.actor,
+        payload: input.payload,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      if (!message.includes("Invalid call state transition")) throw err;
+    }
+  }
+}
+
 async function processIdempotent(
   organizationId: string | null,
   provider: string,
@@ -89,25 +164,14 @@ async function processIdempotent(
 }
 
 exotel.post("/call-status", async (c) => {
-  const rawBody = await c.req.text();
-  const sig = c.req.header("x-exotel-signature");
-  if (!verifyExotelSignature(rawBody, sig)) {
+  const parsedBody = await parseRawWebhookBody(c);
+  if (!parsedBody.ok) {
     logger.warn("exotel_webhook_bad_signature", { path: "/call-status" });
     return c.json({ error: "Invalid signature" }, 403);
   }
 
-  // Parse body manually after reading as text
-  let raw: Record<string, unknown>;
-  const contentType = c.req.header("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    raw = JSON.parse(rawBody) as Record<string, unknown>;
-  } else {
-    const params = new URLSearchParams(rawBody);
-    raw = Object.fromEntries(params.entries());
-  }
-
   const callIdQuery = c.req.query("callId");
-  const parsed = webhookService.parse({ ...raw, ...(callIdQuery ? { CustomField: callIdQuery } : {}) });
+  const parsed = webhookService.parse({ ...parsedBody.raw, ...(callIdQuery ? { CustomField: callIdQuery } : {}) });
 
   let call = null;
   if (callIdQuery) {
@@ -135,9 +199,8 @@ exotel.post("/call-status", async (c) => {
       if (!mapped) return;
 
       try {
-        await callState.transition({
-          organizationId: call.organizationId,
-          callId: call.id,
+        await transitionCallFromProvider({
+          call,
           to: mapped as CallStatus,
           actor: "exotel.webhook",
           payload: parsed.raw,

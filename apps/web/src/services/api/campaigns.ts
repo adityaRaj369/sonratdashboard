@@ -25,6 +25,18 @@ export type CreateCampaignInput = {
   contactIds?: string[];
 };
 
+export type CampaignContact = {
+  id: string;
+  campaignId?: string;
+  contactId: string;
+  status?: string;
+  attemptCount?: number;
+  nextAttemptAt?: string | null;
+  lastCallId?: string | null;
+  createdAt?: string;
+  contact?: Contact;
+};
+
 export const campaignsApi = {
   list: (query?: { cursor?: string; limit?: number; search?: string; status?: string }) =>
     http.get<CursorPage<Campaign>>(BASE, query),
@@ -37,6 +49,7 @@ export const campaignsApi = {
     http.post<Campaign>(BASE, body, { idempotencyKey: crypto.randomUUID() }),
   update: (id: string, body: Partial<CreateCampaignInput>) =>
     http.patch<Campaign>(`${BASE}/${id}`, body),
+  remove: (id: string) => http.delete<{ ok: true }>(`${BASE}/${id}`),
   start: (id: string) =>
     http.post<Campaign>(`${BASE}/${id}/start`, undefined, {
       idempotencyKey: crypto.randomUUID(),
@@ -44,12 +57,14 @@ export const campaignsApi = {
   pause: (id: string) => http.post<Campaign>(`${BASE}/${id}/pause`),
   cancel: (id: string) => http.post<Campaign>(`${BASE}/${id}/cancel`),
   contacts: (id: string, query?: { cursor?: string; limit?: number }) =>
-    http.get<CursorPage<Contact & { attemptCount?: number; status?: string }>>(
+    http.get<CursorPage<CampaignContact>>(
       `${BASE}/${id}/contacts`,
       query,
     ),
   addContacts: (id: string, contactIds: string[]) =>
     http.post<{ added: number }>(`${BASE}/${id}/contacts`, { contactIds }),
+  removeContact: (id: string, contactId: string) =>
+    http.delete<{ removed: number }>(`${BASE}/${id}/contacts/${contactId}`),
   calls: (id: string, query?: { cursor?: string; limit?: number }) =>
     http.get<CursorPage<Call>>(`${BASE}/${id}/calls`, query),
 };
