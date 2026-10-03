@@ -118,6 +118,20 @@ campaigns.post(
   },
 );
 
+campaigns.delete(
+  "/:id/contacts/:contactId",
+  requirePerm("campaigns.write"),
+  async (c) => {
+    const result = await service.removeContact(
+      getOrgId(c),
+      getUserId(c),
+      c.req.param("id")!,
+      c.req.param("contactId")!,
+    );
+    return c.json(result);
+  },
+);
+
 campaigns.delete("/:id", requirePerm("campaigns.write"), async (c) => {
   await service.remove(getOrgId(c), getUserId(c), c.req.param("id")!);
   return c.json({ ok: true });

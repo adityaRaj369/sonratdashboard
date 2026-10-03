@@ -2,12 +2,12 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const variants = {
-  default: "bg-secondary text-secondary-foreground",
-  success: "bg-success/10 text-success border-success/20",
-  warning: "bg-warning/15 text-warning border-warning/25",
-  destructive: "bg-destructive/10 text-destructive border-destructive/20",
-  outline: "bg-card text-foreground border-border",
-  accent: "bg-accent/10 text-accent border-accent/20",
+  default: "border-slate-200 bg-slate-100 text-slate-700",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  destructive: "border-rose-200 bg-rose-50 text-rose-700",
+  outline: "bg-white text-slate-900 border-slate-200",
+  accent: "border-sky-200 bg-sky-50 text-sky-700",
 } as const;
 
 export function Badge({
@@ -20,7 +20,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold",
         variants[variant],
         className,
       )}

@@ -6,13 +6,18 @@ import type {
 } from "../types.js";
 import { ExotelClient, type ExotelCallResource } from "./client.js";
 
-function exotelCallLimitSeconds(requested?: number): number {
+function exotelMaxCallDurationSeconds(requested?: number): number {
   const configured = Number(process.env.EXOTEL_MAX_CALL_DURATION_SECONDS ?? 600);
   const hardLimit = Number.isFinite(configured)
     ? Math.min(Math.max(Math.floor(configured), 30), 1800)
     : 600;
   const requestedLimit = Number.isFinite(requested) ? Math.floor(requested as number) : hardLimit;
-  return Math.min(Math.max(requestedLimit, 30), hardLimit);
+  return Math.min(Math.max(requestedLimit, 120), hardLimit);
+}
+
+function exotelRingTimeoutSeconds(requested?: number): number {
+  const value = Number.isFinite(requested) ? Math.floor(requested as number) : 45;
+  return Math.min(Math.max(value, 20), 60);
 }
 
 function normalizeExotelPhone(raw: string): string {
@@ -41,6 +46,7 @@ export class ExotelCallService implements TelephonyProvider {
           From: normalizeExotelPhone(input.to),
           CallerId: normalizeExotelPhone(input.from),
           CallType: "trans",
+          Record: "false",
           StatusCallback: input.statusCallbackUrl,
           StatusCallbackEvents: '["terminal", "answered"]',
           StatusCallbackContentType: "application/json",
@@ -49,6 +55,7 @@ export class ExotelCallService implements TelephonyProvider {
           From: normalizeExotelPhone(input.from),
           To: normalizeExotelPhone(input.to),
           CallerId: normalizeExotelPhone(input.from),
+          Record: "false",
           StatusCallback: input.statusCallbackUrl,
           StatusCallbackEvents: '["terminal", "answered"]',
           StatusCallbackContentType: "application/json",
@@ -64,11 +71,11 @@ export class ExotelCallService implements TelephonyProvider {
       body.StreamUrl = input.streamUrl.replace(/^http/i, "ws");
       body.StreamType = "bidirectional";
     }
-    if (input.record === true) {
-      body.Record = "true";
-    }
-    // Keep the answered-call billing cap server-controlled.
-    body.TimeLimit = String(exotelCallLimitSeconds(input.timeoutSeconds));
+    void input.record;
+    // TimeOut controls ringing only. TimeLimit is the answered-call hard cap.
+    // Keep them separate so a short ring timeout never ends a live AI call.
+    body.TimeOut = String(exotelRingTimeoutSeconds());
+    body.TimeLimit = String(exotelMaxCallDurationSeconds(input.timeoutSeconds));
 
     const response = await this.client.request<ExotelCallResource>(
       "POST",

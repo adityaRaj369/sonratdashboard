@@ -24,6 +24,19 @@ export type CallDetail = Call & {
   outcomeDetail?: CallOutcomeDetail | null;
 };
 
+export type CallTranscriptResponse = {
+  turns: TranscriptTurn[];
+  messages?: Array<{
+    id: string;
+    role?: string | null;
+    content?: string | null;
+    language?: string | null;
+    createdAt?: string;
+    [key: string]: unknown;
+  }>;
+  transcripts?: Array<Record<string, unknown>>;
+};
+
 export const callsApi = {
   list: (query?: {
     cursor?: string;
@@ -38,7 +51,7 @@ export const callsApi = {
   events: (id: string) =>
     http.get<{ items: NonNullable<Call["events"]> }>(`${BASE}/${id}/events`),
   transcript: (id: string) =>
-    http.get<{ turns: TranscriptTurn[] }>(`${BASE}/${id}/transcript`),
+    http.get<CallTranscriptResponse>(`${BASE}/${id}/transcript`),
   recording: (id: string) =>
     http.get<{
       id: string;

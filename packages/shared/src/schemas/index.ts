@@ -10,7 +10,7 @@ import { ROLES } from "../rbac/index.js";
 
 export const paginationSchema = z.object({
   cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
+  limit: z.coerce.number().int().min(1).max(1000).default(25),
 });
 
 export const idSchema = z.string().uuid();

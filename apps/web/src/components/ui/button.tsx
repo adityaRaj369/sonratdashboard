@@ -22,14 +22,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variants = {
       primary:
-        "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+        "bg-slate-900 text-white shadow-sm hover:bg-slate-800",
       secondary:
-        "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      ghost: "hover:bg-muted text-foreground",
+        "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white",
+      ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
       outline:
-        "border border-border bg-card hover:bg-muted text-foreground shadow-sm",
+        "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50",
       destructive:
-        "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        "bg-rose-600 text-white shadow-sm hover:bg-rose-500",
     };
     const sizes = {
       sm: "h-8 px-3 text-xs",

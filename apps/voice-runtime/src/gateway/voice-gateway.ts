@@ -9,7 +9,7 @@ import type { CallSession } from "../sessions/call-session.js";
 import { childLogger } from "../lib/logger.js";
 import type { VoiceRuntimeConfig } from "../lib/config.js";
 import { base64ToBuffer, bufferToBase64 } from "../audio/formats.js";
-import { fetchCallSessionBootstrap } from "../lib/api-client.js";
+import { fetchCallSessionBootstrap, transitionCall } from "../lib/api-client.js";
 
 /** Exotel wants media chunks that are multiples of 320 bytes (20ms @ 8kHz PCM16). */
 const EXOTEL_FRAME_BYTES = 320; // 20ms @ 8kHz — lower playback latency
@@ -45,37 +45,50 @@ export class VoiceGateway {
     let sessionId: string | null = null;
     let outboundBuf = Buffer.alloc(0);
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let drainingOutbound = false;
 
-    const flushOutbound = (padLast: boolean) => {
-      if (!streamSid || socket.readyState !== socket.OPEN) {
-        outboundBuf = Buffer.alloc(0);
-        return;
-      }
-      while (outboundBuf.length >= EXOTEL_FRAME_BYTES) {
-        const frame = outboundBuf.subarray(0, EXOTEL_FRAME_BYTES);
-        outboundBuf = outboundBuf.subarray(EXOTEL_FRAME_BYTES);
-        const msg = {
+    const sendFrame = (frame: Buffer) => {
+      if (!streamSid || socket.readyState !== socket.OPEN) return false;
+      socket.send(
+        JSON.stringify({
           event: "media",
           stream_sid: streamSid,
           streamSid: streamSid,
           media: { payload: bufferToBase64(frame) },
-        };
-        socket.send(JSON.stringify(msg));
+        }),
+      );
+      return true;
+    };
+
+    const flushOutbound = (padLast: boolean) => {
+      if (!streamSid || socket.readyState !== socket.OPEN) {
+        outboundBuf = Buffer.alloc(0);
+        drainingOutbound = false;
+        return;
       }
-      // Never pad silence mid-utterance — that causes audible gaps.
+
+      if (outboundBuf.length >= EXOTEL_FRAME_BYTES) {
+        const frame = outboundBuf.subarray(0, EXOTEL_FRAME_BYTES);
+        outboundBuf = outboundBuf.subarray(EXOTEL_FRAME_BYTES);
+        sendFrame(frame);
+      }
+
       if (padLast && outboundBuf.length > 0) {
         const padded = Buffer.alloc(EXOTEL_FRAME_BYTES, 0);
         outboundBuf.copy(padded);
         outboundBuf = Buffer.alloc(0);
-        socket.send(
-          JSON.stringify({
-            event: "media",
-            stream_sid: streamSid,
-            streamSid: streamSid,
-            media: { payload: bufferToBase64(padded) },
-          }),
-        );
+        sendFrame(padded);
       }
+
+      if (outboundBuf.length >= EXOTEL_FRAME_BYTES) {
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          flushOutbound(false);
+        }, 20);
+        return;
+      }
+
+      drainingOutbound = false;
     };
 
     const stream: TelephonyStream = {
@@ -94,13 +107,9 @@ export class VoiceGateway {
           return;
         }
         outboundBuf = Buffer.concat([outboundBuf, base64ToBuffer(payloadBase64)]);
-        flushOutbound(false);
-        if (flushTimer) clearTimeout(flushTimer);
-        if (outboundBuf.length > 0) {
-          flushTimer = setTimeout(() => {
-            flushTimer = null;
-            flushOutbound(false);
-          }, 20);
+        if (!drainingOutbound && outboundBuf.length >= EXOTEL_FRAME_BYTES) {
+          drainingOutbound = true;
+          flushOutbound(false);
         }
       },
       sendClear: () => {
@@ -109,6 +118,7 @@ export class VoiceGateway {
           flushTimer = null;
         }
         outboundBuf = Buffer.alloc(0);
+        drainingOutbound = false;
         if (!streamSid || socket.readyState !== socket.OPEN) return;
         socket.send(
           JSON.stringify({
@@ -121,6 +131,7 @@ export class VoiceGateway {
       close: () => {
         if (flushTimer) clearTimeout(flushTimer);
         flushOutbound(true);
+        drainingOutbound = false;
         try {
           socket.close();
         } catch {
@@ -155,6 +166,7 @@ export class VoiceGateway {
         flushTimer = null;
       }
       flushOutbound(true);
+      drainingOutbound = false;
       if (sessionId) {
         void this.sessions.shutdown(sessionId, "exotel_disconnect");
       }
@@ -226,38 +238,52 @@ export class VoiceGateway {
           "agent session bootstrapped",
         );
 
-        const session = await this.sessions.create(
-          {
-            callId: bootstrap.callId,
-            organizationId: bootstrap.organizationId,
-            agentId: bootstrap.agentId,
-            agentVersionId: bootstrap.agentVersionId,
-            campaignId: bootstrap.campaignId ?? params.campaignId,
-            contactId: bootstrap.contactId ?? params.contactId,
-            direction: bootstrap.direction,
-            systemPrompt: bootstrap.systemPrompt,
-            openingInstruction: bootstrap.openingInstruction,
-            enabledTools: bootstrap.enabledTools,
-            defaultLanguage: bootstrap.defaultLanguage,
-            supportedLanguages: bootstrap.supportedLanguages,
-            voiceId: bootstrap.voiceId,
-            metadata: {
-              streamSid: start.streamSid,
-              providerCallSid: start.callSid,
-              mediaFormat: start.mediaFormat,
-              agentName: bootstrap.agentName,
-              companyName: bootstrap.companyName,
-              agentPurpose: bootstrap.agentPurpose,
+        let session;
+        try {
+          session = await this.sessions.create(
+            {
+              callId: bootstrap.callId,
+              organizationId: bootstrap.organizationId,
+              agentId: bootstrap.agentId,
+              agentVersionId: bootstrap.agentVersionId,
+              campaignId: bootstrap.campaignId ?? params.campaignId,
+              contactId: bootstrap.contactId ?? params.contactId,
+              direction: bootstrap.direction,
+              systemPrompt: bootstrap.systemPrompt,
               openingInstruction: bootstrap.openingInstruction,
+              enabledTools: bootstrap.enabledTools,
+              defaultLanguage: bootstrap.defaultLanguage,
+              supportedLanguages: bootstrap.supportedLanguages,
+              voiceId: bootstrap.voiceId,
+              metadata: {
+                streamSid: start.streamSid,
+                providerCallSid: start.callSid,
+                mediaFormat: start.mediaFormat,
+                agentName: bootstrap.agentName,
+                companyName: bootstrap.companyName,
+                agentPurpose: bootstrap.agentPurpose,
+                openingInstruction: bootstrap.openingInstruction,
+              },
             },
-          },
-          {
-            onOutboundAudio: async (payload) => {
-              stream.sendMedia(payload);
+            {
+              onOutboundAudio: async (payload) => {
+                stream.sendMedia(payload);
+              },
+              onClear: () => stream.sendClear(),
             },
-            onClear: () => stream.sendClear(),
-          },
-        );
+          );
+        } catch (err) {
+          this.log.error(
+            { err, callId: bootstrap.callId, providerCallSid: start.callSid },
+            "failed to start AI session; closing Exotel stream",
+          );
+          await transitionCall(bootstrap.callId, "FAILED", "AI session startup failed", {
+            providerCallSid: start.callSid,
+            message: err instanceof Error ? err.message : String(err),
+          });
+          stream.close();
+          return;
+        }
 
         state.sessionId = session.id;
         this.log.info(

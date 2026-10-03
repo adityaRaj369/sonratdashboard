@@ -74,7 +74,7 @@ export const scheduleCampaign: JobHandler<ScheduleCampaignData> = async (
           campaignId,
           campaignContactId: cc.id,
           contactId: cc.contactId,
-          idempotencyKey: `outbound:${campaignId}:${cc.contactId}:${cc.attemptCount}`,
+          idempotencyKey: `outbound:${campaignId}:${cc.contactId}:${cc.attemptCount}:${Date.now()}`,
         },
         {
           jobId: `create-outbound-call-${cc.id}-${cc.attemptCount}-${Date.now()}`,

@@ -50,7 +50,7 @@ export function Drawer({
       />
       <aside
         className={cn(
-          "absolute top-0 h-full w-[280px] border-border bg-sidebar shadow-soft transition-transform",
+          "absolute top-0 h-full w-[280px] border-slate-200 bg-white shadow-2xl transition-transform",
           side === "left" ? "left-0 border-r" : "right-0 border-l",
           open
             ? "translate-x-0"

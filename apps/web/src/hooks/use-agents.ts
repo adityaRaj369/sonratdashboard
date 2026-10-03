@@ -41,6 +41,14 @@ export function useCreateAgent() {
   });
 }
 
+export function useDeleteAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => agentsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: agentKeys.all }),
+  });
+}
+
 export function useUpdateAgentSection(agentId: string) {
   const qc = useQueryClient();
   return useMutation({

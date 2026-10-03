@@ -80,8 +80,8 @@ export class GeminiLiveSession implements AiSession {
                 },
             ]
             : undefined,
-        // Aggressive low-latency configuration for real-time natural conversational flow:
-        // Short silence window allows the agent to answer immediately without awkward pauses.
+        // Low-latency turn detection. Keep this short for sales calls; larger
+        // silence windows directly increase response latency after the user talks.
         realtimeInputConfig: {
           automaticActivityDetection: {
             startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",

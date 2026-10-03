@@ -46,6 +46,7 @@ export const agentsApi = {
   },
   update: (id: string, body: { name?: string; description?: string }) =>
     http.patch<Agent>(`${BASE}/${id}`, body),
+  remove: (id: string) => http.delete<{ ok: true }>(`${BASE}/${id}`),
   updateSection: (id: string, section: AgentSection, data: unknown) =>
     http.patch<Agent>(`${BASE}/${id}/sections/${section}`, { data }),
   uploadKnowledgeDocument: (id: string, file: File) => {

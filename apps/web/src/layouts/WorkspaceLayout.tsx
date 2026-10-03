@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { Moon, PanelLeftOpen, Search, Sun } from "lucide-react";
 import cx from "@/utils/cx";
@@ -38,6 +38,27 @@ export default function WorkspaceLayout({
   environment?: string;
   onGoHome?: () => void;
 }) {
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    document.querySelectorAll("link[data-dashboard-styles]").forEach((node, idx) => {
+      if (idx > 0) node.remove();
+    });
+
+    let link = document.querySelector<HTMLLinkElement>("link[data-dashboard-styles]");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "/dashboard-styles.css?v=visibility-20260616";
+      link.setAttribute("data-dashboard-styles", "true");
+      document.head.appendChild(link);
+    }
+
+    return () => {
+      document.querySelectorAll("link[data-dashboard-styles]").forEach((node) => node.remove());
+    };
+  }, []);
+
   const sidebarShade = "#f8fafc";
   const computedTabWidth = useMemo(() => {
     const width = typeof headerTabWidth === "number" ? headerTabWidth : 240;

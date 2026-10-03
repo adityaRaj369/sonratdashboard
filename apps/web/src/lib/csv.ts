@@ -169,3 +169,19 @@ export function parseCsvText(text: string): ParsedCsvContact[] {
 
   return results;
 }
+
+export async function parseLeadFile(file: File): Promise<ParsedCsvContact[]> {
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) return [];
+    const sheet = workbook.Sheets[firstSheetName];
+    if (!sheet) return [];
+    return parseCsvText(XLSX.utils.sheet_to_csv(sheet));
+  }
+
+  return parseCsvText(await file.text());
+}
